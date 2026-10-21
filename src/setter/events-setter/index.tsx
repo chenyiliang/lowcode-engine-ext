@@ -21,11 +21,76 @@ const DEFINITION_EVENT_TYPE = {
 
 const SETTER_NAME = 'event-setter';
 
-export default class EventsSetter extends Component<{
-  value: any[];
-  onChange: (eventList: any[]) => void;
-}> {
-  state = {
+/** Fusion RadioGroup 的取值类型（等价于 @alifd/next 的 RadioValue） */
+type RadioValue = string | number | boolean;
+
+/** 事件类型切换按钮 */
+interface EventBtn {
+  value: string;
+  label: string;
+}
+
+/** 单个可绑定事件（来自 definition 的 list） */
+interface EventItem {
+  name: string;
+  description?: string;
+  /** 运行时由 checkEventListStatus 写入 */
+  disabled?: boolean;
+  /** 事件代码模板 */
+  template?: string;
+}
+
+/** 原生事件分组（native-events.ts 的形状） */
+interface NativeEventGroup {
+  category?: string;
+  name: string;
+  eventList: Array<{ name: string; disabled?: boolean }>;
+  /** checkEventListStatus 会给分组写 disabled（与原实现一致） */
+  disabled?: boolean;
+}
+
+/** 已绑定事件的记录，onChange 回传给宿主 */
+interface EventDataItem {
+  name: string;
+  type?: RadioValue | null;
+  relatedEventName?: string;
+  paramStr?: string;
+}
+
+/** definition：宿主声明的事件配置项 */
+interface EventDefinitionItem {
+  type: string;
+  list: EventItem[];
+}
+
+/** onChange 回传的载荷（object 形式，见 deleteEvent / bindEvent） */
+interface EventsSetterValue {
+  eventDataList: EventDataItem[];
+  eventList: EventItem[];
+}
+
+interface EventsSetterProps {
+  /**
+   * 既可能是 `EventDataItem[]`（旧格式），也可能是 `{ eventDataList }`（新格式），
+   * 见 state 初始化里的兼容分支，因此保持宽松。
+   */
+  value?: any;
+  onChange: (value: EventsSetterValue) => void;
+  definition: EventDefinitionItem[];
+}
+
+interface EventsSetterState {
+  eventBtns: EventBtn[];
+  eventList: EventItem[];
+  selectType: RadioValue | null;
+  nativeEventList: NativeEventGroup[];
+  lifeCycleEventList: EventItem[];
+  isRoot: boolean;
+  eventDataList: EventDataItem[];
+}
+
+export default class EventsSetter extends Component<EventsSetterProps, EventsSetterState> {
+  state: EventsSetterState = {
     eventBtns: [],
     eventList: [],
     selectType: null,
@@ -76,7 +141,7 @@ export default class EventsSetter extends Component<{
       const schema = project.exportSchema();
 
       const lifeCycles = schema.componentsTree[0].lifeCycles;
-      const eventDataList = [];
+      const eventDataList: EventDataItem[] = [];
       if (lifeCycles) {
         for (const key in lifeCycles) {
           eventDataList.push({
@@ -100,7 +165,7 @@ export default class EventsSetter extends Component<{
     const { definition } = this.props;
     let isRoot = false;
     let isCustom = false;
-    let eventBtns = [];
+    let eventBtns: EventBtn[] = [];
     definition.map((item) => {
       if (item.type === DEFINITION_EVENT_TYPE.LIFE_CYCLE_EVENT) {
         isRoot = true;
@@ -147,7 +212,9 @@ export default class EventsSetter extends Component<{
 
   initEventList() {
     const { definition } = this.props;
-    let nativeEventList = [];
+    // 先按 definition 里的 NATIVE_EVENTS list 填充；为空时回落到内置 nativeEvents 分组，
+    // 回落分支里 setState 的值被 TS 收窄为 NativeEventGroup[]（见下方赋值）。
+    let nativeEventList: EventItem[] | NativeEventGroup[] = [];
     definition.map((item) => {
       if (item.type === DEFINITION_EVENT_TYPE.EVENTS) {
         this.checkEventListStatus(item.list, DEFINITION_EVENT_TYPE.EVENTS);
@@ -174,12 +241,12 @@ export default class EventsSetter extends Component<{
     if (nativeEventList.length == 0) {
       nativeEventList = nativeEvents;
       this.setState({
-        nativeEventList,
+        nativeEventList: nativeEvents,
       });
     }
   }
 
-  checkEventListStatus = (eventList: any[], eventType: string) => {
+  checkEventListStatus = (eventList: EventItem[], eventType: string) => {
     const { eventDataList } = this.state;
     if (
       eventType === DEFINITION_EVENT_TYPE.EVENTS ||
@@ -199,7 +266,9 @@ export default class EventsSetter extends Component<{
       });
     } else if (eventType === DEFINITION_EVENT_TYPE.NATIVE_EVENTS) {
       eventDataList.map((eventDataItem) => {
-        eventList.map((item) => {
+        // NATIVE_EVENTS 分支下 eventList 的元素是分组，含 eventList 子数组。
+        // 注意：这里给「分组」写 disabled（与原实现一致），不是给子事件写。
+        (eventList as unknown as NativeEventGroup[]).map((item) => {
           item.eventList.map((eventItem) => {
             if (eventItem.name === eventDataItem.name) {
               item.disabled = true;
@@ -219,7 +288,7 @@ export default class EventsSetter extends Component<{
   /**
    * 渲染事件信息
    */
-  renderEventInfoCell = (value, index, record) => {
+  renderEventInfoCell = (value: unknown, index: number, record: EventDataItem) => {
     let eventTagText = '';
     if (record.type === EVENT_CONTENTS.NATIVE_EVENT) {
       eventTagText = '原';
@@ -238,7 +307,7 @@ export default class EventsSetter extends Component<{
           <Icon type="attachment" size="small" className="related-icon" />
           <span
             className="related-event-name"
-            onClick={() => this.onRelatedEventNameClick(record.relatedEventName)}
+            onClick={() => this.onRelatedEventNameClick(record.relatedEventName ?? '')}
           >
             {record.relatedEventName || ''}
           </span>
@@ -250,14 +319,14 @@ export default class EventsSetter extends Component<{
   /**
    * 渲染事件操作项
    */
-  renderEventOperateCell = (rowIndex, colIndex, record) => {
+  renderEventOperateCell = (rowIndex: number, colIndex: number, record: EventDataItem) => {
     return (
       <div>
         <Icon
           type="set"
           className="event-operate-icon"
           style={{ marginLeft: '3px', marginRight: '4px' }}
-          onClick={() => this.openDialog(record.relatedEventName, record.name, true)}
+          onClick={() => this.openDialog(record.relatedEventName ?? '', record.name, true)}
         />
         <Icon
           type="ashbin"
@@ -268,7 +337,7 @@ export default class EventsSetter extends Component<{
     );
   };
 
-  updateEventListStatus = (eventName: string, unDisabled: boolean) => {
+  updateEventListStatus = (eventName: string, unDisabled: boolean = false) => {
     const { eventList, nativeEventList, lifeCycleEventList } = this.state;
     eventList.map((item) => {
       if (item.name === eventName) {
@@ -296,7 +365,7 @@ export default class EventsSetter extends Component<{
     });
   };
 
-  onRadioChange = (value) => {
+  onRadioChange = (value: RadioValue) => {
     this.setState({
       selectType: value,
     });
@@ -315,7 +384,7 @@ export default class EventsSetter extends Component<{
 
     this.updateEventListStatus(eventName);
     this.closeEventMenu();
-    this.openDialog(eventName, eventName);
+    this.openDialog(eventName, eventName, false);
   };
 
   onRelatedEventNameClick = (eventName: string) => {
@@ -368,10 +437,10 @@ export default class EventsSetter extends Component<{
     this.updateEventListStatus(eventName, true);
   };
 
-  openDialog = (relatedEventName: string, eventName: String, isEdit: boolean) => {
+  openDialog = (relatedEventName: string, eventName: string, isEdit: boolean) => {
     const { eventDataList, eventList } = this.state;
-    let paramStr;
-    let configEventData; // 配置的event信息
+    let paramStr: string | undefined;
+    let configEventData: EventItem | undefined; // 配置的event信息
     eventDataList.map((item) => {
       if (item.name == eventName) {
         paramStr = item.paramStr;
@@ -398,7 +467,7 @@ export default class EventsSetter extends Component<{
     );
   };
 
-  bindEvent = (relatedEventName: string, paramStr: string, bindEventName: String) => {
+  bindEvent = (relatedEventName: string, paramStr: string, bindEventName: string) => {
     const { eventDataList, eventList } = this.state;
     eventDataList.map((item) => {
       if (item.name === bindEventName) {
@@ -437,7 +506,7 @@ export default class EventsSetter extends Component<{
           dataSource={eventBtns}
           shape="button"
           size="medium"
-          value={selectType}
+          value={selectType ?? undefined}
           onChange={this.onRadioChange}
           style={{ width: '100%' }}
         />

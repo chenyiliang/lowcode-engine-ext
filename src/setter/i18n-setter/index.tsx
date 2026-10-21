@@ -3,8 +3,59 @@ import { Input, Search, Button, Icon } from '@alifd/next';
 import { project } from '@alilc/lowcode-engine';
 import './index.less';
 import lang from './lang.json';
-class I18nSetter extends Component {
-  state = {
+
+/** 单个语言的一条文案数据 */
+interface I18nDataItem {
+  langKey: string;
+  i18nData: string;
+}
+
+/** 一个 i18n key 聚合出的多语言数据 */
+interface I18nPageDataItem {
+  i18nkey: string;
+  i18nDataList: I18nDataItem[];
+}
+
+/** 组件内部维护的 i18n 值结构 */
+interface I18nValue {
+  type?: string;
+  key?: string;
+  i18nDataList?: I18nDataItem[];
+  inputValue?: string;
+}
+
+/** 回写给引擎的 props 值：{ type, key, [langKey]: 文案 } */
+interface I18nPropsValue {
+  type?: string;
+  key?: string;
+  [langKey: string]: unknown;
+}
+
+/** 本组件只用到 field.editor.get('designer')，按实际使用面精确描述 */
+interface I18nSetterField {
+  editor: {
+    get(key: string): any;
+  };
+}
+
+interface I18nSetterProps {
+  value?: I18nPropsValue;
+  onChange: (value: I18nPropsValue) => void;
+  field: I18nSetterField;
+}
+
+interface I18nSetterState {
+  isShowSearchPopUp: boolean;
+  isShowBindDataPopUp: boolean;
+  i18nValue: I18nValue;
+  i18nPageDataList?: I18nPageDataItem[];
+  i18nSchema?: Record<string, Record<string, string>>;
+  i18nSearchDataList?: I18nPageDataItem[];
+  value?: string;
+}
+
+class I18nSetter extends Component<I18nSetterProps, I18nSetterState> {
+  state: I18nSetterState = {
     isShowSearchPopUp: false,
     isShowBindDataPopUp: false,
     i18nValue: {},
@@ -15,9 +66,13 @@ class I18nSetter extends Component {
     const { value } = this.props;
 
     const schema = project.exportSchema();
-    const i18nSchema = schema.i18n;
+    // schema.i18n 类型上是可选的。兜底成 {} 同时修掉一个既有运行时 bug：
+    // 原代码用 JSON.stringify(i18nSchema) === '{}' 判断"i18n 结构为空"，
+    // 但 undefined 时 JSON.stringify 返回 undefined 而非 '{}'，该分支永远不触发，
+    // 中英默认文案就建不出来。
+    const i18nSchema: Record<string, Record<string, string>> = schema.i18n ?? {};
     const i18nPageDataList = this.transfromI18nData(i18nSchema);
-    let i18nValue = {};
+    let i18nValue: I18nValue = {};
     if (value && value.key) {
       i18nValue = this.setI18nValue(value.key, i18nPageDataList);
     }
@@ -29,11 +84,13 @@ class I18nSetter extends Component {
     });
   }
 
-  transfromI18nData = (i18nSchema) => {
-    let i18nPageDataList = [];
-    for (let langKey in i18nSchema) {
-      let i18nMap = i18nSchema[langKey];
-      for (let key2 in i18nMap) {
+  transfromI18nData = (
+    i18nSchema: Record<string, Record<string, string>>,
+  ): I18nPageDataItem[] => {
+    const i18nPageDataList: I18nPageDataItem[] = [];
+    for (const langKey in i18nSchema) {
+      const i18nMap = i18nSchema[langKey];
+      for (const key2 in i18nMap) {
         let matchFlag = false;
         i18nPageDataList.length > 0 &&
           i18nPageDataList.map((i18nItem) => {
@@ -44,10 +101,11 @@ class I18nSetter extends Component {
                 i18nData: i18nMap[key2],
               });
             }
+            return i18nItem;
           });
 
         if (!matchFlag) {
-          let i18nItem = {
+          const i18nItem: I18nPageDataItem = {
             i18nkey: key2,
             i18nDataList: [],
           };
@@ -64,7 +122,7 @@ class I18nSetter extends Component {
     return i18nPageDataList;
   };
 
-  onSearch(value, filterValue) {
+  onSearch(value?: string, filterValue?: string) {
     // console.log('onSearch', value, filterValue);
   }
 
@@ -96,20 +154,22 @@ class I18nSetter extends Component {
     onChange({});
   };
 
-  setI18nValue = (i18nkey, i18nPageDataList) => {
-    i18nPageDataList = i18nPageDataList || this.state.i18nPageDataList;
-    let i18nDataList;
-    i18nPageDataList.map((item) => {
+  setI18nValue = (i18nkey: string, i18nPageDataList?: I18nPageDataItem[]): I18nValue => {
+    const list = i18nPageDataList || this.state.i18nPageDataList || [];
+    let i18nDataList: I18nDataItem[] = [];
+    list.map((item) => {
       if (item.i18nkey == i18nkey) {
         i18nDataList = item.i18nDataList;
       }
+      return item;
     });
-    let inputValue;
+    let inputValue: string | undefined;
     // 中文用于input展示
     i18nDataList.map((item) => {
       if (item.langKey == 'zh-CN') {
         inputValue = item.i18nData;
       }
+      return item;
     });
     return {
       type: 'i18n',
@@ -123,10 +183,14 @@ class I18nSetter extends Component {
     const { onChange } = this.props;
     const { editor } = this.props.field;
     const schema = project.exportSchema();
-    let i18nSchema = schema.i18n;
-    let newI18nKey = this.uniqueId('i18n');
+    // schema.i18n 类型上是可选的。兜底成 {} 同时修掉一个既有运行时 bug：
+    // 原代码用 JSON.stringify(i18nSchema) === '{}' 判断"i18n 结构为空"，
+    // 但 undefined 时 JSON.stringify 返回 undefined 而非 '{}'，该分支永远不触发，
+    // 中英默认文案就建不出来。
+    const i18nSchema: Record<string, Record<string, string>> = schema.i18n ?? {};
+    const newI18nKey = this.uniqueId('i18n');
     // 将新的key添加到i18nSchema中
-    for (let langKey in i18nSchema) {
+    for (const langKey in i18nSchema) {
       i18nSchema[langKey][newI18nKey] = '';
     }
 
@@ -139,7 +203,7 @@ class I18nSetter extends Component {
     }
 
     const i18nPageDataList = this.transfromI18nData(i18nSchema);
-    let i18nValue = this.setI18nValue(newI18nKey, i18nPageDataList);
+    const i18nValue = this.setI18nValue(newI18nKey, i18nPageDataList);
 
     onChange(this.parseI18nValue2PropsValue(i18nValue));
 
@@ -157,9 +221,9 @@ class I18nSetter extends Component {
     return `${prefix}-${(guid++).toString(36).toLowerCase()}`;
   };
 
-  onClickI18nItem = (i18nItem) => {
+  onClickI18nItem = (i18nItem: I18nPageDataItem) => {
     const { onChange } = this.props;
-    let i18nValue = this.setI18nValue(i18nItem.i18nkey);
+    const i18nValue = this.setI18nValue(i18nItem.i18nkey);
     this.setState({
       i18nValue,
       isShowSearchPopUp: false,
@@ -168,15 +232,16 @@ class I18nSetter extends Component {
     onChange(this.parseI18nValue2PropsValue(i18nValue));
   };
 
-  parseI18nValue2PropsValue = (i18nValue) => {
-    let propsValue = {
+  parseI18nValue2PropsValue = (i18nValue: I18nValue): I18nPropsValue => {
+    const propsValue: I18nPropsValue = {
       type: 'i18n',
       key: i18nValue.key,
     };
 
     const { i18nDataList } = i18nValue;
-    i18nDataList.map((item) => {
+    i18nDataList?.map((item) => {
       propsValue[item.langKey] = item.i18nData;
+      return item;
     });
 
     return propsValue;
@@ -198,7 +263,7 @@ class I18nSetter extends Component {
                     return (
                       <div className="i18n-lang-item">
                         <div className="i18n-item-lang-type">
-                          {lang[i18nItem.langKey].i18nLangCN}
+                          {lang[i18nItem.langKey as keyof typeof lang].i18nLangCN}
                         </div>
                         <div className="item-lang-content">{i18nItem.i18nData}</div>
                       </div>
@@ -211,20 +276,22 @@ class I18nSetter extends Component {
     );
   };
 
-  onChange(value, type, e) {
+  onChange(value: string, type: string, e?: unknown) {
     //console.log('onChange', value, type, e);
     // 联想的数据
 
     const { i18nPageDataList } = this.state;
-    let i18nSearchDataList = [];
+    const i18nSearchDataList: I18nPageDataItem[] = [];
 
-    i18nPageDataList.map((item) => {
-      let i18nDataList = item.i18nDataList;
+    i18nPageDataList?.map((item) => {
+      const i18nDataList = item.i18nDataList;
       i18nDataList.map((itemData) => {
         if (value != '' && itemData.i18nData.indexOf(value) >= 0) {
           i18nSearchDataList.push(item);
         }
+        return itemData;
       });
+      return item;
     });
 
     this.setState({
@@ -233,16 +300,19 @@ class I18nSetter extends Component {
     });
   }
 
-  i18nItemOnChange = (value, langKey) => {
+  i18nItemOnChange = (value: string | number, langKey: string, _key?: string) => {
     const { i18nValue } = this.state;
     const { onChange } = this.props;
-    i18nValue.i18nDataList.map((item) => {
+    // i18n 文案为文本，Fusion Input 的 onChange 回传 string | number，此处归一化为字符串
+    const textValue = String(value);
+    i18nValue.i18nDataList?.map((item) => {
       if (item.langKey == langKey) {
-        item.i18nData = value;
+        item.i18nData = textValue;
         if (langKey == 'zh-CN') {
-          i18nValue.inputValue = value;
+          i18nValue.inputValue = textValue;
         }
       }
+      return item;
     });
 
     this.setState({
@@ -254,19 +324,24 @@ class I18nSetter extends Component {
     this.updateI18nSchema(i18nValue);
   };
 
-  updateI18nSchema = (i18nValue) => {
+  updateI18nSchema = (i18nValue: I18nValue) => {
     const { editor } = this.props.field;
     const schema = project.exportSchema();
-    let i18nSchema = schema.i18n;
-    for (let schemaLangKey in i18nSchema) {
-      let schemaLangData = i18nSchema[schemaLangKey];
-      for (let schemaI18nKey in schemaLangData) {
+    // schema.i18n 类型上是可选的。兜底成 {} 同时修掉一个既有运行时 bug：
+    // 原代码用 JSON.stringify(i18nSchema) === '{}' 判断"i18n 结构为空"，
+    // 但 undefined 时 JSON.stringify 返回 undefined 而非 '{}'，该分支永远不触发，
+    // 中英默认文案就建不出来。
+    const i18nSchema: Record<string, Record<string, string>> = schema.i18n ?? {};
+    for (const schemaLangKey in i18nSchema) {
+      const schemaLangData = i18nSchema[schemaLangKey];
+      for (const schemaI18nKey in schemaLangData) {
         if (i18nValue.key == schemaI18nKey) {
           const { i18nDataList } = i18nValue;
-          i18nDataList.map((i18nDataItem) => {
+          i18nDataList?.map((i18nDataItem) => {
             if (i18nDataItem.langKey == schemaLangKey) {
               schemaLangData[schemaI18nKey] = i18nDataItem.i18nData;
             }
+            return i18nDataItem;
           });
         }
       }
@@ -316,7 +391,7 @@ class I18nSetter extends Component {
               i18nValue.i18nDataList.map((i18nItem) => {
                 return (
                   <div className="bind-item">
-                    <p>{lang[i18nItem.langKey].i18nLangCN}</p>
+                    <p>{lang[i18nItem.langKey as keyof typeof lang].i18nLangCN}</p>
                     <Input
                       size="small"
                       value={i18nItem.i18nData}

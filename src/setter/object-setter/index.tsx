@@ -11,9 +11,15 @@ const { Title } = editorCabin;
 const { isSettingField } = designerCabin;
 const { createSettingFieldView, PopupContext } = skeletonCabin;
 
+/**
+ * descriptor 既可传一个属性名字符串（走 field.getPropValue 取值），
+ * 也可传一个由 field 计算标题的函数。解析后的结果作为 ReactNode 展示。
+ */
+type Descriptor = string | ((field: IPublicModelSettingField) => React.ReactNode);
+
 export default class ObjectSetter extends Component<{
   field: IPublicModelSettingField;
-  descriptor?: IPublicTypeTitleContent;
+  descriptor?: Descriptor;
   config: ObjectSetterConfig;
   mode?: 'popup' | 'form';
   // 1: in tablerow  2: in listrow 3: in column-cell
@@ -42,9 +48,9 @@ interface ObjectSetterConfig {
 }
 
 interface RowSetterProps {
-  value: any;
+  value?: any;
   field: IPublicModelSettingField;
-  descriptor?: IPublicTypeTitleContent;
+  descriptor?: Descriptor;
   config: ObjectSetterConfig;
   columns?: number;
   primaryButton?: boolean;
@@ -52,7 +58,42 @@ interface RowSetterProps {
 
 interface RowSetterState {
   items: IPublicModelSettingField[];
-  descriptor?: IPublicTypeTitleContent;
+  descriptor?: React.ReactNode;
+}
+
+/**
+ * skeletonCabin.PopupContext 提供的浮层管道。它属于引擎内部能力，
+ * `@alilc/lowcode-engine` 尚未产出 dist，这里按其真实用法声明最小接口，
+ * 而不是把 context 放宽成 any。
+ */
+interface PopupPipe {
+  create(options: { width?: number; canCloseByOutSideClick?: boolean }): PopupPipe;
+  send(content: React.ReactNode, title?: React.ReactNode): void;
+  show(target: Element | EventTarget, key?: string): void;
+}
+
+/** 子字段 setValue 包装：既触发子字段本身、也冒泡到父字段 */
+function wrapSetValue(
+  original: ((target: IPublicModelSettingField, value: any) => void) | undefined,
+  parentExtraProps: IPublicModelSettingField['extraProps'],
+) {
+  return (target: IPublicModelSettingField, value: any) => {
+    // 调用子字段本身的 setValue
+    original?.apply(null, [target, value]);
+    // 调用父字段本身的 setValue
+    parentExtraProps.setValue?.apply(null, [target, value]);
+  };
+}
+
+/**
+ * designerCabin.isSettingField 的本地类型收窄包装。
+ * 引擎 dist 未产出前该 guard 是 any、无法在 TS 里收窄联合类型，
+ * 这里显式声明为类型谓词，运行期仍委托原 guard。
+ */
+function isFieldItem(
+  item: IPublicModelSettingField | IPublicTypeCustomView,
+): item is IPublicModelSettingField {
+  return isSettingField(item);
 }
 
 function getItemsFromProps(props: RowSetterProps, state?: RowSetterState) {
@@ -69,13 +110,7 @@ function getItemsFromProps(props: RowSetterProps, state?: RowSetterState) {
           // in column-cell
           forceInline: 3,
         });
-        const originalSetValue = item.extraProps.setValue;
-        item.extraProps.setValue = (...args) => {
-          // 调用子字段本身的 setValue
-          originalSetValue?.apply(null, args);
-          // 调用父字段本身的 setValue
-          extraProps.setValue?.apply(null, args);
-        };
+        item.extraProps.setValue = wrapSetValue(item.extraProps.setValue, extraProps);
         items.push(item);
       }
       if (items.length >= l) {
@@ -108,27 +143,26 @@ class RowSetter extends Component<RowSetterProps, RowSetterState> {
 
     let firstRun = true;
     field.onEffect(() => {
-      const state: any = {};
+      let descriptorNode: React.ReactNode;
       if (descriptor) {
-        if (typeof descriptor === 'function') {
-          state.descriptor = descriptor(field);
-        } else {
-          state.descriptor = field.getPropValue(descriptor);
-        }
+        descriptorNode =
+          typeof descriptor === 'function' ? descriptor(field) : field.getPropValue(descriptor);
       } else {
-        state.descriptor = field.title;
+        descriptorNode = field.title;
       }
+      const state = { descriptor: descriptorNode };
 
       if (firstRun) {
         firstRun = false;
-        this.state = state;
+        // 保持原实现：首帧直接整体替换 this.state（只含 descriptor）
+        this.state = state as RowSetterState;
       } else {
         this.setState(state);
       }
     });
   }
 
-  shouldComponentUpdate(nextProps: any, nextState: any) {
+  shouldComponentUpdate(nextProps: RowSetterProps, nextState: RowSetterState) {
     if (this.state.descriptor !== nextState.descriptor) {
       return true;
     }
@@ -138,7 +172,7 @@ class RowSetter extends Component<RowSetterProps, RowSetterState> {
     return false;
   }
 
-  private pipe: any;
+  private pipe: PopupPipe | null = null;
 
   render() {
     const { items } = this.state;
@@ -167,7 +201,7 @@ class RowSetter extends Component<RowSetterProps, RowSetterState> {
             size="small"
             ghost="light"
             onClick={(e) => {
-              this.pipe.show((e as any).target, field.id);
+              this.pipe?.show((e as any).target, field.id);
             }}
           >
             <CustomIcon type="icon-ic_edit" />
@@ -186,7 +220,7 @@ class RowSetter extends Component<RowSetterProps, RowSetterState> {
           size="small"
           ghost="light"
           onClick={(e) => {
-            this.pipe.show((e as any).target, field.id);
+            this.pipe?.show((e as any).target, field.id);
           }}
         >
           <CustomIcon type="icon-ic_edit" />
@@ -211,14 +245,8 @@ class FormSetter extends Component<FormSetterProps> {
 
     if (Array.isArray(field.items) && field.items.length > 0) {
       field.items.forEach((item: IPublicModelSettingField | IPublicTypeCustomView) => {
-        if (isSettingField(item)) {
-          const originalSetValue = item.extraProps.setValue;
-          item.extraProps.setValue = (...args) => {
-            // 调用子字段本身的 setValue
-            originalSetValue?.apply(null, args);
-            // 调用父字段本身的 setValue
-            extraProps.setValue?.apply(null, args);
-          };
+        if (isFieldItem(item)) {
+          item.extraProps.setValue = wrapSetValue(item.extraProps.setValue, extraProps);
         }
       });
       this.items = field.items;

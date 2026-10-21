@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { Radio, Select, Box, Input } from '@alifd/next';
+import type { DataSourceItem } from '@alifd/next/types/select';
 import { BehaviorActionProps, BehaviorAction } from '../types';
 
-const fetchLinkList = async (url: string) => (url ? (await fetch(url)).json() : []);
+const fetchLinkList = async (url?: string) => (url ? (await fetch(url)).json() : []);
 
 interface LinkActionValue {
   type?: 'internal' | 'external';
@@ -100,10 +101,10 @@ const LinkContent: React.FC<BehaviorActionProps<LinkActionValue, LinkActionOptio
               hasClear
               placeholder="请输入链接"
               value={value.url}
-              onChange={(val) => {
+              onChange={(val: string | number) => {
                 onChange({
                   type: value.type || 'internal',
-                  url: val,
+                  url: String(val),
                 });
               }}
             />
@@ -114,10 +115,10 @@ const LinkContent: React.FC<BehaviorActionProps<LinkActionValue, LinkActionOptio
               showSearch
               dataSource={data}
               value={value?.url}
-              onChange={(val) => {
+              onChange={(val: DataSourceItem | DataSourceItem[]) => {
                 onChange({
                   ...value,
-                  url: val,
+                  url: val == null ? undefined : String(val),
                 });
               }}
             />

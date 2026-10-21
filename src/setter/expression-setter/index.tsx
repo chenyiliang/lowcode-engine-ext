@@ -1,5 +1,4 @@
 import React, { PureComponent } from 'react';
-import PropTypes from 'prop-types';
 import { Select, Balloon } from '@alifd/next';
 import { project } from '@alilc/lowcode-engine';
 import * as acorn from 'acorn';
@@ -11,7 +10,7 @@ import './index.less';
 
 const { Option, AutoComplete } = Select;
 const { Tooltip } = Balloon;
-const helpMap = {
+const helpMap: Record<string, string> = {
   this: '容器上下文对象',
   state: '容器的state',
   props: '容器的props',
@@ -24,40 +23,66 @@ const helpMap = {
   field: '表单Field对象',
 };
 
-export default class ExpressionView extends PureComponent {
+/**
+ * React 19 已移除 `propTypes` 运行时校验，改用 TS 类型描述入参契约。
+ * 这些字段由 lowcode 引擎的 setter 调度层注入，因此除 value/onChange 外都是可选的。
+ */
+export interface ExpressionSetterProps {
+  /** 低代码字段模型，用于取 editor 上下文 */
+  field?: any;
+  context?: Record<string, any>;
+  dataSource?: string[];
+  locale?: string;
+  messages?: Record<string, string>;
+  onChange?: (value: { type: 'JSExpression'; value: string } | undefined) => void;
+  placeholder?: string;
+  value?: any;
+  [key: string]: any;
+}
+
+interface ExpressionSetterState {
+  value: any;
+  dataSource: string[];
+}
+
+const defaultMessages: Record<string, string> = zhCN;
+
+export default class ExpressionView extends PureComponent<
+  ExpressionSetterProps,
+  ExpressionSetterState
+> {
   static displayName = 'Expression';
 
-  static propTypes = {
-    context: PropTypes.object,
-    dataSource: PropTypes.array,
-    locale: PropTypes.string,
-    messages: PropTypes.object,
-    onChange: PropTypes.func,
-    placeholder: PropTypes.string,
-    value: PropTypes.string,
-  };
-
-  static defaultProps = {
+  /**
+   * React 19 只在**函数组件**上移除了 `defaultProps`，类组件仍支持。
+   * 这里保留 static defaultProps，避免把 setter 的默认值散落到各个解构点。
+   */
+  static defaultProps: Partial<ExpressionSetterProps> = {
     context: {},
     dataSource: [],
     locale: 'zh-CN',
-    messages: zhCN,
+    messages: defaultMessages,
     onChange: () => {},
     placeholder: '',
     value: '',
   };
 
-  expression: React.RefObject<unknown>;
+  expression: React.RefObject<HTMLDivElement | null>;
 
-  i18n: any;
+  i18n: (key: string, values?: Record<string, any>) => string;
 
-  t: any;
+  t: ReturnType<typeof setTimeout> | undefined;
 
-  $input: any;
+  $input: HTMLInputElement | null = null;
 
-  listenerFun: ((event: any) => void) | undefined;
+  listenerFun: ((event: KeyboardEvent | MouseEvent) => void) | null = null;
 
-  static getInitValue(val: { value: any; match: (arg0: RegExp) => any }) {
+  state: ExpressionSetterState = {
+    value: undefined,
+    dataSource: [],
+  };
+
+  static getInitValue(val: { type?: string; value?: any } | string | undefined) {
     if (isJSExpression(val)) {
       if (typeof val === 'object') {
         return val.value;
@@ -69,13 +94,13 @@ export default class ExpressionView extends PureComponent {
     return val;
   }
 
-  constructor(props: any) {
+  constructor(props: ExpressionSetterProps) {
     super(props);
-    this.expression = React.createRef();
-    this.i18n = generateI18n(props.locale, props.messages);
+    this.expression = React.createRef<HTMLDivElement | null>();
+    this.i18n = generateI18n(props.locale ?? 'zh-CN', props.messages ?? defaultMessages);
     this.state = {
-      value: ExpressionView.getInitValue(props.value),
-      dataSource: props.dataSource || [],
+      value: ExpressionView.getInitValue(props.value as any),
+      dataSource: props.dataSource ?? [],
     };
   }
 
@@ -92,8 +117,8 @@ export default class ExpressionView extends PureComponent {
 
   onChange(value: string) {
     const realInputValue = value;
-    const realDataSource = null;
-    let nextCursorIndex: number;
+    const realDataSource: string[] | null = null;
+    let nextCursorIndex: number | undefined;
     // 更新值
     // if (actionType === 'itemClick' || actionType === 'enter') {
     //   // const curValue = this.state.value;
@@ -102,11 +127,11 @@ export default class ExpressionView extends PureComponent {
     //   // }
     // }
     // 更新数据源
-    const newState = {
+    const newState: Partial<ExpressionSetterState> = {
       value: realInputValue,
     };
     if (realDataSource !== null) newState.dataSource = realDataSource;
-    this.setState(newState, () => {
+    this.setState(newState as ExpressionSetterState, () => {
       nextCursorIndex && this.setInputCursorPosition(nextCursorIndex);
     });
     // 默认加上变量表达式
@@ -153,19 +178,23 @@ export default class ExpressionView extends PureComponent {
    * @param  {String} str 模板字符串
    * @return {String}     光标前的对象字符串
    */
-  getCurrentFiled(str: string | any[]) {
-    str += 'x'; // .后面加一个x字符，便于acorn解析
+  getCurrentFiled(str: string) {
+    const source = `${str}x`; // .后面加一个x字符，便于acorn解析
     try {
-      const astTree = acorn.parse(str);
-      const right = astTree.body[0].expression.right || astTree.body[0].expression;
+      // acorn 8 起 `ecmaVersion` 是必填项（缺省时运行时只会 warn 并回退到 2020）
+      const astTree = acorn.parse(source, { ecmaVersion: 'latest' });
+      const [firstStatement] = astTree.body;
+      if (!firstStatement || firstStatement.type !== 'ExpressionStatement') return null;
+      const { expression } = firstStatement;
+      const right = expression.type === 'AssignmentExpression' ? expression.right : expression;
       if (right.type === 'MemberExpression') {
         const { start, end } = right;
-        str = str.slice(start, end);
-        return { str, start, end };
+        return { str: source.slice(start, end), start, end };
       }
     } catch (e) {
       return null;
     }
+    return null;
   }
 
   /**
@@ -173,13 +202,13 @@ export default class ExpressionView extends PureComponent {
    * @param  {Array}
    * @return {Array}
    */
-  getContextKeys(keys: []) {
-    const { editor } = this.props.field;
+  getContextKeys(keys: string[]): string[] {
+    const { editor } = this.props.field ?? {};
     const limitKeys = ['schema', 'utils', 'constants'];
     if (keys.length === 0) return limitKeys;
     if (!limitKeys.includes(keys[0])) return [];
-    let result = [];
-    let keyValue = editor;
+    let result: string[] = [];
+    let keyValue: any = editor;
     let assert = false;
     keys.forEach((item) => {
       if (!keyValue[item] || typeof keyValue[item] !== 'object') {
@@ -196,7 +225,7 @@ export default class ExpressionView extends PureComponent {
   }
 
   /* 过滤key */
-  filterKey(obj: any, name: string) {
+  filterKey(obj: Record<string, any>, name: string) {
     const filterKeys = [
       'reloadDataSource',
       'REACT_HOT_LOADER_RENDERED_GENERATION',
@@ -208,7 +237,7 @@ export default class ExpressionView extends PureComponent {
       'setState',
       'isPureReactComponent',
     ];
-    const result = [];
+    const result: string[] = [];
     for (const key in obj) {
       if (key.indexOf('_') !== 0 && filterKeys.indexOf(key) === -1) {
         result.push(`${name}.${key}`);
@@ -223,12 +252,15 @@ export default class ExpressionView extends PureComponent {
    * @param  {String}
    * @return {Boolen}
    */
-  filterOption(inputValue: string, item: { value: string | any[] }) {
+  filterOption(inputValue: string | number, item: { value?: string | number | boolean | null }) {
     const cursorIndex = this.getInputCursorPosition();
-    if (typeof(inputValue)!='string') return false;
-    const preStr = inputValue.substr(0, cursorIndex);
-    const lastKey: string[] = preStr.split('.').slice(-1);
-    if (!lastKey) return true;
+    if (typeof inputValue != 'string') return false;
+    const preStr = inputValue.substr(0, cursorIndex ?? 0);
+    // dataSource 是 string[]，取光标前最后一段作为匹配关键字
+    const lastKey = preStr.split('.').slice(-1)[0];
+    if (lastKey === undefined) return true;
+    // 选项值运行期恒为字符串，非字符串值不参与匹配
+    if (typeof item.value !== 'string') return false;
     if (item.value.indexOf(lastKey) > -1) return true;
     return false;
   }
@@ -239,7 +271,19 @@ export default class ExpressionView extends PureComponent {
 
   render() {
     const { value, dataSource } = this.state;
-    const { placeholder } = this.props;
+    // locale/messages/field/context 是 setter 自身消费的属性，不能透传给 Fusion AutoComplete
+    //（locale 类型也不同）；其余属性作为 Fusion 透传项保留。
+    const {
+      placeholder,
+      locale: _locale,
+      messages: _messages,
+      field: _field,
+      context: _context,
+      value: _value,
+      onChange: _onChange,
+      dataSource: _dataSource,
+      ...autoCompleteProps
+    } = this.props;
     const isValObject = !!(value == '[object Object]');
     const title = isValObject
       ? this.i18n('valueIllegal')
@@ -268,7 +312,7 @@ export default class ExpressionView extends PureComponent {
               <div>
                 <AutoComplete
                   size="small"
-                  {...this.props}
+                  {...autoCompleteProps}
                   style={{ width: '100%' }}
                   dataSource={dataSource}
                   placeholder={placeholder || this.i18n('jsExpression')}
@@ -279,10 +323,11 @@ export default class ExpressionView extends PureComponent {
                   popupClassName="expression-setter-item-inner"
                   // eslint-disable-next-line no-shadow
                   itemRender={(itemValue) => {
+                    const itemKey = String(itemValue.value);
                     return (
-                      <Option key={itemValue.value} text={itemValue.label} value={itemValue.value}>
+                      <Option key={itemKey} value={itemValue.value}>
                         <div className="code-input-value">{itemValue.value}</div>
-                        <div className="code-input-help">{helpMap[itemValue.value]}</div>
+                        <div className="code-input-help">{helpMap[itemKey]}</div>
                       </Option>
                     );
                   }}
@@ -302,12 +347,15 @@ export default class ExpressionView extends PureComponent {
   componentDidMount() {
     this.$input = this.findInputElement();
     if (this.$input) {
-      this.listenerFun = (event) => {
-        const isMoveKey = !!(event.type == 'keyup' && ~[37, 38, 39, 91].indexOf(event.keyCode));
+      this.listenerFun = (event: KeyboardEvent | MouseEvent) => {
+        const isMoveKey = !!(
+          event.type == 'keyup' &&
+          ~[37, 38, 39, 91].indexOf((event as KeyboardEvent).keyCode)
+        );
         const isMouseup = event.type == 'mouseup';
         if (isMoveKey || isMouseup) {
           // eslint-disable-next-line react/no-access-state-in-setstate
-          const dataSource = this.getDataSource(this.state.value) || [];
+          const dataSource = this.getDataSource() || [];
           this.setState({
             dataSource,
           });
@@ -319,34 +367,41 @@ export default class ExpressionView extends PureComponent {
   }
 
   componentWillUnmount() {
+    if (this.t) {
+      clearTimeout(this.t);
+    }
     if (this.listenerFun && this.$input) {
       this.$input.removeEventListener('keyup', this.listenerFun, false);
       this.$input.removeEventListener('mouseup', this.listenerFun, false);
     }
+    this.$input = null;
+    this.listenerFun = null;
   }
 
   /**
-   * 获取Input输入框DOM节点
+   * 获取 Input 输入框 DOM 节点。
+   *
+   * React 19 移除了 `ReactDOM.findDOMNode`，这里沿用已有的容器 ref 往下查，
+   * 不依赖实例 -> DOM 的隐式解析。
    */
-  findInputElement() {
-    return this.expression.current.children[0].getElementsByTagName('input')[0];
+  findInputElement(): HTMLInputElement | null {
+    const container = this.expression.current;
+    return container?.querySelector('input') ?? null;
   }
 
   /**
    * 获取光标位置
-   *
    */
-  getInputCursorPosition() {
-    if (!this.$input) return;
-    return this.$input.selectionStart;
+  getInputCursorPosition(): number | undefined {
+    if (!this.$input) return undefined;
+    return this.$input.selectionStart ?? undefined;
   }
 
   /*
    * 字符串取得对象keys
    */
   getObjectKeys(str: string) {
-    let keys: string | any[] = [];
-    if (str) keys = str.split('.');
+    const keys = str ? str.split('.') : [];
     return keys.slice(0, keys.length - 1);
   }
 
@@ -354,7 +409,7 @@ export default class ExpressionView extends PureComponent {
    * 设置input组件光标位置在闭合}前
    */
   setInputCursorPosition(idx: number) {
-    this.$input.setSelectionRange(idx, idx);
+    this.$input?.setSelectionRange(idx, idx);
     this.forceUpdate();
   }
 }

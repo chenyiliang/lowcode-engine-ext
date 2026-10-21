@@ -42,11 +42,15 @@ interface fontProps {
   onStyleChange?: onStyleChange;
   unit?: string;
 }
+/** RadioGroup 回填值收敛成本面板圆角类型枚举 */
+const asBorderRadiusType = (value: StyleData['value']): BorderRadiusType | null =>
+  value === BorderRadiusType.fixedBorder || value === BorderRadiusType.partBorder ? value : null;
+
 export default (props: fontProps) => {
   const { styleData, onStyleChange, unit } = props;
   const { borderType, borderStyle, shadowType} = borderConfig;
-  const [selBorderType, setSelBorderType] = useState(null);
-  const [borderDirection, setBorderDirection] = useState(null);
+  const [selBorderType, setSelBorderType] = useState<BorderRadiusType | null>(null);
+  const [borderDirection, setBorderDirection] = useState<string | null>(null);
   const [shadow, setShadow] = useState('')
   useEffect(() => {
     if (!borderDirection) {
@@ -86,7 +90,7 @@ export default (props: fontProps) => {
   const onChangeBorderType = (styleDataList: Array<StyleData>) => {
     if (styleDataList) {
       const styleKey = styleDataList[0].value;
-      setSelBorderType(styleKey);
+      setSelBorderType(asBorderRadiusType(styleKey));
     }
   };
 
@@ -94,7 +98,7 @@ export default (props: fontProps) => {
 
     // 需要清除partBorder的圆角设置，不然会冲突，容易遗漏
 
-    onStyleChange([
+    onStyleChange?.([
       {
         styleKey,
         value: unit ? addUnit(value, unit) : value,
@@ -123,7 +127,7 @@ export default (props: fontProps) => {
   };
 
   const onPartBorderRadiusChange = (styleKey: string, value: number, unit: string,styleData:any) => {
-    let styleDataList = [
+    let styleDataList: StyleData[] = [
       {
         styleKey,
         value: unit ? addUnit(value, unit) : value,
@@ -135,12 +139,12 @@ export default (props: fontProps) => {
         value:null
       })
     }
-    onStyleChange(styleDataList);
+    onStyleChange?.(styleDataList);
   }
 
 
   const onBorderTypeChange = (styleKey: string, value: string) => {
-    onStyleChange([
+    onStyleChange?.([
       {
         styleKey,
         value,
@@ -174,18 +178,18 @@ export default (props: fontProps) => {
       if(index!==undefined&&index!==null){
         bgSizeArray[index] = unifiedValue
       }
-      let curValue: String =''
+      let curValue = ''
       bgSizeArray.forEach((item)=>{
         curValue = curValue+item+' '
       })
       curValue=curValue.substring(0,curValue.length-1)
-      const styleDataList = [
+      const styleDataList: StyleData[] = [
         {
           styleKey,
           value:curValue
         },
       ];
-      onStyleChange(styleDataList);
+      onStyleChange?.(styleDataList);
   }
   //insetShadow会在第一位插入inset字符串，使所有阴影样式的序号+1
   const insetBoxShadowShift = shadow==='insetShadow' ? 1 : 0
@@ -198,7 +202,7 @@ export default (props: fontProps) => {
           styleKey={'borderType'}
           {...props}
           onStyleChange={onChangeBorderType}
-          value={selBorderType}
+          value={selBorderType ?? undefined}
         />
 
         {selBorderType == 'fixedBorder' && (
@@ -206,8 +210,8 @@ export default (props: fontProps) => {
             <div className="radius-container">
               <Range
                 max={BORDER_MAX}
-                value={removeUnit(styleData.borderRadius)}
-                onChange={(val) => onRangeChange('borderRadius', val, unit)}
+                value={removeUnit(styleData.borderRadius) ?? undefined}
+                onChange={(val) => onRangeChange('borderRadius', String(val), unit)}
               />
 
               <Number
@@ -236,7 +240,7 @@ export default (props: fontProps) => {
                   styleKey={borderRadiusMap.borderTopLeftRadius}
                   {...props}
                   style={{ width: '68px' }}
-                  onChangeFunction = {(styleKey, val, unit)=>onPartBorderRadiusChange(styleKey, val, unit,styleData)}
+                  onChangeFunction = {(styleKey: string, val: number, unit: string)=>onPartBorderRadiusChange(styleKey, val, unit,styleData)}
                 />
               </div>
               <div className="row-item">
@@ -246,7 +250,7 @@ export default (props: fontProps) => {
                   styleKey={borderRadiusMap.borderTopRightRadius}
                   {...props}
                   style={{ width: '68px' }}
-                  onChangeFunction = {(styleKey, val, unit)=>onPartBorderRadiusChange(styleKey, val, unit,styleData)}
+                  onChangeFunction = {(styleKey: string, val: number, unit: string)=>onPartBorderRadiusChange(styleKey, val, unit,styleData)}
                 />
               </div>
             </Row>
@@ -263,7 +267,7 @@ export default (props: fontProps) => {
                   styleKey={borderRadiusMap.borderBottomLeftRadius}
                   {...props}
                   style={{ width: '68px' }}
-                  onChangeFunction = {(styleKey, val, unit)=>onPartBorderRadiusChange(styleKey, val, unit,styleData)}
+                  onChangeFunction = {(styleKey: string, val: number, unit: string)=>onPartBorderRadiusChange(styleKey, val, unit,styleData)}
                 />
               </div>
               <div className="row-item">
@@ -358,7 +362,7 @@ export default (props: fontProps) => {
                     style={{ marginTop: '10px' }}
                     value={styleData[borderDirection + 'Style']}
                     onChange={(value) => {
-                      onBorderTypeChange(borderDirection + 'Style', value);
+                      onBorderTypeChange(borderDirection + 'Style', String(value ?? ''));
                     }}
                   >
                     <Option value="solid">solid</Option>
@@ -376,7 +380,8 @@ export default (props: fontProps) => {
           styleKey={'shadowType'}
           {...props}
           onStyleChange={(type)=>{
-            onBoxShadowChange('boxShadow', type?.[0].value, undefined, undefined ,type?.[0].value  )
+            const shadowValue = type?.[0]?.value;
+            onBoxShadowChange('boxShadow', shadowValue, undefined, undefined, String(shadowValue ?? ''))
           }}
           value={shadow}
         >
@@ -386,6 +391,7 @@ export default (props: fontProps) => {
               <span className='shadow-color-title'>{borderConfig.shadowColor}</span>
               <ColorInput
               {...props}
+              styleKey={'boxShadow'}
               color = {styleData['boxShadow']?.split(' ')?.[insetBoxShadowShift+4]}
               onStyleChange = {(color)=>{
                 onBoxShadowChange('boxShadow', color?.[0].value, insetBoxShadowShift+4,undefined,undefined,true )

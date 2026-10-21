@@ -13,6 +13,14 @@ import { backgroundSizeMap } from './constant';
 const backgroundConfig = intlLocal();
 
 const {Panel} = Collapse;
+
+/**
+ * RadioGroup 回填的 StyleData.value 在本面板里语义上都是字符串（见 locale 的 dataList），
+ * 但类型上是 `string | number | boolean | null | undefined`，这里收敛成 Row 需要的 `string | null`。
+ */
+const asStyleString = (value: StyleData['value']): string | null =>
+  typeof value === 'string' ? value : null;
+
 interface fontProps {
   styleData: StyleData | any;
   onStyleChange?: onStyleChange;
@@ -21,29 +29,29 @@ interface fontProps {
 export default (props: fontProps) => {
   const { onStyleChange, styleData } = props;
   const { backgroundType, backgroundSize, backgroundPosition, backgroundRepeat } = backgroundConfig;
-  const [bgType, setBgType] = useState(null);
-  const [bgSizeType, setBgSizeType] = useState(null);
-  const [bgRepeatType, setBgRepeatType] = useState(null);
-  const [bgPositionType, setBgPositionType] = useState<string>('');
+  const [bgType, setBgType] = useState<string | null>(null);
+  const [bgSizeType, setBgSizeType] = useState<string | null>(null);
+  const [bgRepeatType, setBgRepeatType] = useState<string | null>(null);
+  const [bgPositionType, setBgPositionType] = useState<string | undefined>('');
   // 背景类型切换
   const onBgTypeChange = (styleDataList: StyleData[]) => {
     if (styleDataList) {
-      setBgType(styleDataList[0].value);
+      setBgType(asStyleString(styleDataList[0].value));
     }
   };
   // 背景图片切换
-  const onBgImageChange = (value: string) => {
-    onStyleChange([
+  const onBgImageChange = (value: string | number) => {
+    onStyleChange?.([
       {
         styleKey: 'backgroundImage',
-        value: formatBgImgUrl(value),
+        value: formatBgImgUrl(String(value)),
       },
     ]);
   };
   // backgroundSize类型切换
   const onBgSizeTypeChange = (styleDataList: StyleData[]) => {
     const backgroundSize = 'backgroundSize';
-    onStyleChange([
+    onStyleChange?.([
       {
         styleKey: backgroundSize,
         value: null,
@@ -51,9 +59,9 @@ export default (props: fontProps) => {
     ]);
     if (styleDataList) {
       const value = styleDataList[0]?.value;
-      setBgSizeType(value);
+      setBgSizeType(asStyleString(value));
       if (value != backgroundSizeMap.default) {
-        onStyleChange([
+        onStyleChange?.([
           {
             styleKey: backgroundSize,
             value,
@@ -65,16 +73,16 @@ export default (props: fontProps) => {
   // backgroundSize值切换
   const onBgSizeChange = (
     styleKey: string,
-    value: number,
+    value: number | string,
     unit: string,
     styleData: any,
     direction: string,
   ) => {
     const bgSizeArray = styleData[styleKey]
-      ? unifyStyle(styleData[styleKey])?.split(' ')
+      ? unifyStyle(styleData[styleKey])?.split(' ') ?? ['auto', 'auto']
       : ['auto', 'auto'];
     const [width = 'auto', height = 'auto'] = bgSizeArray;
-    let styleDataList;
+    let styleDataList: StyleData[];
     if (styleData) {
       let unifiedValue = unit ? addUnit(value, unit) : value;
       if (unifiedValue === null || unifiedValue === undefined) unifiedValue = 'auto'; // 空样式默认为auto
@@ -94,15 +102,15 @@ export default (props: fontProps) => {
           },
         ];
       }
-      onStyleChange(styleDataList);
+      onStyleChange?.(styleDataList);
     }
   };
   // backgroundRepeat切换
   const onBgRepeatChange = (styleDataList: StyleData[]) => {
     if (styleDataList) {
       const value = styleDataList[0]?.value;
-      setBgRepeatType(value);
-      onStyleChange([
+      setBgRepeatType(asStyleString(value));
+      onStyleChange?.([
         {
           styleKey: 'backgroundRepeat',
           value,
@@ -114,18 +122,18 @@ export default (props: fontProps) => {
   // backgroundPosition切换
   const onBgPositionChange = (
     styleKey: string,
-    value: number,
+    value: number | string,
     unit: string,
     styleData: any,
     direction: string,
   ) => {
     const bgSizeArray = styleData[styleKey]
-      ? unifyStyle(styleData[styleKey]).split(' ')
+      ? unifyStyle(styleData[styleKey])?.split(' ') ?? ['auto', 'auto']
       : ['auto', 'auto'];
     const [width = 'auto', height = 'auto'] = bgSizeArray;
-    let styleDataList;
+    let styleDataList: StyleData[];
     if (styleData) {
-      let unifiedValue = /^-?[0-9]\d*$/.test(value) ? value + unit : value; // 正则匹配非0数字并加单位
+      let unifiedValue = /^-?[0-9]\d*$/.test(String(value)) ? `${value}${unit}` : `${value}`; // 正则匹配非0数字并加单位
       if (
         unifiedValue === null ||
         unifiedValue === undefined ||
@@ -149,15 +157,15 @@ export default (props: fontProps) => {
           },
         ];
       }
-      onStyleChange(styleDataList);
+      onStyleChange?.(styleDataList);
     }
   };
   // 透明度切换
-  const onOpacityChange = (styleKey: string, value: number, unit?: string) => {
-    onStyleChange([
+  const onOpacityChange = (styleKey: string, value: number | null, unit?: string) => {
+    onStyleChange?.([
       {
         styleKey,
-        value: unit ? addUnit(value, unit) : value,
+        value: unit && value != null ? addUnit(value, unit) : value,
       },
     ]);
   };
@@ -176,9 +184,11 @@ export default (props: fontProps) => {
         ? styleData.backgroundSize
         : backgroundSizeMap.default;
     setBgSizeType(bgSizeType);
-    const chosenItem = backgroundPosition.dataList.find((item) => {
-      return item.position === styleData.backgroundPosition;
-    });
+    const chosenItem = backgroundPosition.dataList.find(
+      (item: { title: string; position: string; icon: string }) => {
+        return item.position === styleData.backgroundPosition;
+      },
+    );
     setBgPositionType(chosenItem?.title);
   };
 
@@ -217,7 +227,7 @@ export default (props: fontProps) => {
           styleKey=""
           {...props}
           onStyleChange={onBgTypeChange}
-          value={bgType}
+          value={bgType ?? undefined}
          />
 
         {bgType == 'color' && (
@@ -242,9 +252,10 @@ export default (props: fontProps) => {
             <Row
               title={backgroundSize.title}
               dataList={backgroundSize.dataList}
+              styleKey=""
               {...props}
               onStyleChange={onBgSizeTypeChange}
-              value={bgSizeType}
+              value={bgSizeType ?? undefined}
              />
             {bgSizeType == backgroundSizeMap.default && (
               <div className="inner-row-contaienr-bgsize">
@@ -282,13 +293,14 @@ export default (props: fontProps) => {
             <Row title={backgroundPosition.title} styleKey="border" {...props}>
               <div className="background-position-container">
                 <div className="background-position-container-left">
-                  {backgroundPosition.dataList.map((item) => {
+                  {backgroundPosition.dataList.map(
+                    (item: { title: string; position: string; icon: string }) => {
                     return (
                       <div
                         className={bgPositionType === item.title ? 'sel-icon' : ''}
                         onClick={() => {
                           setBgPositionType(item.title);
-                          onStyleChange([
+                          onStyleChange?.([
                             {
                               styleKey: 'backgroundPosition',
                               value: item.position,
@@ -342,7 +354,7 @@ export default (props: fontProps) => {
               styleKey=""
               {...props}
               onStyleChange={onBgRepeatChange}
-              value={bgRepeatType}
+              value={bgRepeatType ?? undefined}
              />
           </>
         )}
@@ -353,7 +365,7 @@ export default (props: fontProps) => {
               disabled={isCssVarBind(styleData.opacity)}
               style={{ marginLeft: '10px', marginRight: '10px', width: '104px' }}
               value={!isEmptyValue(styleData.opacity) ? styleData.opacity * 100 : 0}
-              onChange={(val) => onOpacityChange('opacity', parseInt(val) / 100)}
+              onChange={(val) => onOpacityChange('opacity', parseInt(String(val), 10) / 100)}
             />
             <NumberPicker
               value={
@@ -362,7 +374,9 @@ export default (props: fontProps) => {
               disabled={isCssVarBind(styleData.opacity)}
               max={100}
               min={0}
-              onChange={(val) => onOpacityChange('opacity', isEmptyValue(val) ? null : val / 100)}
+              onChange={(val) =>
+                onOpacityChange('opacity', val == null ? null : parseFloat(String(val)) / 100)
+              }
               innerAfter={'%'}
              />
           </div>

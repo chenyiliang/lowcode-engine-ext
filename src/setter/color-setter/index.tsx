@@ -9,7 +9,8 @@ interface ColorSetterProps {
 }
 interface ColorSetterState {
   width: number;
-  setterValue: string;
+  // 初始为 null，getDerivedStateFromProps 会用 value/defaultValue 填充
+  setterValue: string | null;
 }
 export default class ColorSetter extends React.Component<ColorSetterProps, ColorSetterState> {
   static displayName = 'ColorSetter';
@@ -39,7 +40,13 @@ export default class ColorSetter extends React.Component<ColorSetterProps, Color
   componentWillUnmount() {
     window.removeEventListener('resize', this.changeWidth);
   }
-  static getDerivedStateFromProps(nextProps: ColorSetterProps, prevState: ColorSetterState): any {
+  // 形参用 Partial 而非 ColorSetterProps：React 19 的 @types 对 ComponentClass<any> 的
+  // getDerivedStateFromProps 检查更严，要求它能接受 Readonly<any>。声明具体 Props 会因函数参数
+  // 逆变而不兼容，导致下游 registerSetter(setterMap) 报 TS2345。Partial 既满足逆变又保留体内类型。
+  static getDerivedStateFromProps(
+    nextProps: Partial<ColorSetterProps>,
+    prevState: ColorSetterState,
+  ): Partial<ColorSetterState> | null {
     const { value, defaultValue } = nextProps;
     if (prevState.setterValue == null) {
       if (value == undefined && defaultValue) {
@@ -71,7 +78,7 @@ export default class ColorSetter extends React.Component<ColorSetterProps, Color
         size="small"
         className="lowcode-setter-color"
         style={{ width: '100%' }}
-        innerBefore={<div className="color-box" style={{ backgroundColor: setterValue }} />}
+        innerBefore={<div className="color-box" style={{ backgroundColor: setterValue ?? undefined }} />}
         value={setterValue}
         onChange={onChange}
       />
@@ -86,7 +93,7 @@ export default class ColorSetter extends React.Component<ColorSetterProps, Color
         triggerType="click"
         closable={false}
       >
-        <SketchPicker color={setterValue} onChange={this.handleChange} />
+        <SketchPicker color={setterValue ?? undefined} onChange={this.handleChange} />
       </Balloon>
     );
   }

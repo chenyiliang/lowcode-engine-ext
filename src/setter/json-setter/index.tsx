@@ -31,20 +31,28 @@ const defaultEditorOption = {
 };
 
 interface JsonSetterProps {
-  value: string;
-  type: string;
-  defaultValue: string;
-  placeholder: string;
-  hasClear: boolean;
-  onChange: (icon: string) => undefined;
-  icons: string[];
+  value?: any;
+  type?: string;
+  defaultValue?: string;
+  placeholder?: string;
+  hasClear?: boolean;
+  onChange: (value: any) => void;
+  icons?: string[];
+  /** 由低代码字段模型注入 */
+  removeProp?: () => void;
 }
-export default class JsonSetter extends PureComponent<JsonSetterProps> {
+
+interface JsonSetterState {
+  isShowDialog: boolean;
+  value: string;
+}
+
+export default class JsonSetter extends PureComponent<JsonSetterProps, JsonSetterState> {
   static displayName = 'JsonSetter';
 
   private datasourceCode = '';
 
-  state = {
+  state: JsonSetterState = {
     isShowDialog: false,
     value: JSON.stringify(this.props.value),
   };
@@ -58,8 +66,14 @@ export default class JsonSetter extends PureComponent<JsonSetterProps> {
     this.datasourceCode = value;
   };
 
-  componentWillReceiveProps(nextProps) {
-    const nextValue = JSON.stringify(nextProps.value);
+  /**
+   * React 19 已移除 `componentWillReceiveProps`，改用 `componentDidUpdate` 同步外部传入的 value。
+   * `state.value` 只由外部 props 驱动（弹窗内的编辑内容单独放在 `datasourceCode`），
+   * 所以这里先比 props 引用、再比序列化结果，不会造成更新循环。
+   */
+  componentDidUpdate(prevProps: JsonSetterProps) {
+    if (prevProps.value === this.props.value) return;
+    const nextValue = JSON.stringify(this.props.value);
     if (nextValue !== this.state.value) {
       this.setState({
         value: nextValue,
@@ -76,7 +90,7 @@ export default class JsonSetter extends PureComponent<JsonSetterProps> {
   /**
    * 渲染按钮
    */
-  renderButton = (value) => {
+  renderButton = (value: string) => {
     return !value ? (
       <Button size="small" type="normal" onClick={this.openDialog}>
         { intl('BindingData') }
@@ -89,7 +103,7 @@ export default class JsonSetter extends PureComponent<JsonSetterProps> {
     );
   };
 
-  updateCode = (newCode) => {
+  updateCode = (newCode: string) => {
     this.datasourceCode = newCode;
   };
 
@@ -102,7 +116,7 @@ export default class JsonSetter extends PureComponent<JsonSetterProps> {
       } catch (e) {
         Dialog.alert({
           title: intl('FailedToSaveData'),
-          content: e.message,
+          content: (e as Error)?.message,
         });
       }
     } else {
@@ -154,7 +168,7 @@ export default class JsonSetter extends PureComponent<JsonSetterProps> {
                 value={js_beautify(value)}
                 {...defaultEditorOption}
                 {...{ language: 'json' }}
-                onChange={(newCode) => this.updateCode(newCode)}
+                onChange={(newCode: string) => this.updateCode(newCode)}
               />
             </div>
           </Dialog>

@@ -2,6 +2,7 @@ import React, { PureComponent } from 'react';
 import { Button, Icon, Dialog } from '@alifd/next';
 import MonacoEditor from '@alilc/lowcode-plugin-base-monaco-editor';
 import { event, skeleton } from '@alilc/lowcode-engine';
+import { IPublicModelSettingField } from '@alilc/lowcode-types';
 import { js_beautify } from 'js-beautify';
 import './index.less';
 
@@ -32,16 +33,37 @@ const defaultEditorOption = {
   },
 };
 
-interface FunctionSetterProps {
-  value: string;
+/**
+ * JSFunction 协议值：`{ type: 'JSFunction', value: 'function(){...}' }`。
+ * 老代码把 value 当成字符串处理，实际运行期拿到的是该对象，这里按真实形状声明。
+ */
+interface JSFunctionValue {
   type: string;
-  defaultValue: string;
-  placeholder: string;
-  hasClear: boolean;
-  onChange: (icon: string) => undefined;
-  icons: string[];
+  value: string;
 }
-export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
+
+interface FunctionSetterProps {
+  /** JSFunction 协议值 */
+  value?: JSFunctionValue;
+  type?: string;
+  defaultValue?: string;
+  placeholder?: string;
+  hasClear?: boolean;
+  onChange: (value: JSFunctionValue) => void;
+  icons?: string[];
+  /** 低代码字段模型，用于取 id/name */
+  field: IPublicModelSettingField;
+  /** 事件绑定弹窗生成函数时用的模板 */
+  template?: string;
+  /** 解绑时移除属性 */
+  removeProp: () => void;
+}
+
+interface FunctionSetterState {
+  isShowDialog: boolean;
+}
+
+export default class FunctionSetter extends PureComponent<FunctionSetterProps, FunctionSetterState> {
   static defaultProps = {
     value: undefined,
     type: 'string',
@@ -53,7 +75,10 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
 
   private emitEventName = '';
 
-  state = {
+  /** 弹窗编辑器里的最新代码，OK 时写回 */
+  private functionCode = '';
+
+  state: FunctionSetterState = {
     isShowDialog: false,
   };
 
@@ -62,7 +87,7 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
     event.on(`common:${this.emitEventName}.bindEvent`, this.bindEvent);
   }
 
-  bindEvent = (eventName, paramStr) => {
+  bindEvent = (eventName: string, paramStr: string) => {
     this.bindEventCallback(eventName, paramStr);
   };
 
@@ -70,7 +95,7 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
     event.off(`${this.emitEventName}.bindEvent`, this.bindEvent);
   }
 
-  bindFunction = (isEdit) => {
+  bindFunction = (isEdit?: boolean) => {
     const { field, value, template } = this.props;
 
     let paramStr;
@@ -93,12 +118,12 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
   };
 
   openDialog = () => {
-    const { value = {} } = this.props;
+    const { value } = this.props;
     this.setState({
       isShowDialog: true,
     });
 
-    this.functionCode = value.value;
+    this.functionCode = value?.value ?? '';
   };
 
   closeDialog = () => {
@@ -140,7 +165,7 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
     );
   };
 
-  updateCode = (newCode) => {
+  updateCode = (newCode: string) => {
     this.functionCode = newCode;
   };
 
@@ -154,7 +179,7 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
     this.closeDialog();
   };
 
-  focusFunctionName = (functionName) => {
+  focusFunctionName = (functionName?: string) => {
     skeleton.showPanel('codeEditor');
 
     setTimeout(() => {
@@ -171,7 +196,7 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
     const { value } = this.props;
 
     // 解析函数名
-    const functionName = this.parseFunctionName(value.value);
+    const functionName = this.parseFunctionName(value?.value ?? '');
     return (
       <div className="function-container">
         <img
@@ -262,7 +287,7 @@ export default class FunctionSetter extends PureComponent<FunctionSetterProps> {
                 value={js_beautify(value.value)}
                 {...defaultEditorOption}
                 {...{ language: 'javascript' }}
-                onChange={(newCode) => this.updateCode(newCode)}
+                onChange={(newCode: string) => this.updateCode(newCode)}
               />
             </div>
           </Dialog>

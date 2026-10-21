@@ -10,7 +10,7 @@ const KEY_ARROW_UP = 'ArrowUp';
 
 interface layoutBoxProps {
   styleData: StyleData | any;
-  onStyleChange: onStyleChange;
+  onStyleChange?: onStyleChange;
   unit?: string;
   layoutPropsConfig: any;
 }
@@ -25,11 +25,11 @@ const removeUnit = (value: any) => {
 export default (props: layoutBoxProps) => {
   const { onStyleChange, unit = 'px', styleData, layoutPropsConfig } = props;
 
-  const onInputChange = (styleKey: string, value: string) => {
+  const onInputChange = (styleKey: string, value: string | number) => {
     if (value != '') {
       // 判断是否是数字
-      if (!isNaN(parseInt(value))) {
-        onStyleChange([
+      if (!isNaN(parseInt(String(value)))) {
+        onStyleChange?.([
           {
             styleKey,
             value: addUnit(value, unit),
@@ -37,7 +37,7 @@ export default (props: layoutBoxProps) => {
         ]);
       }
     } else {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey,
           value: null,
@@ -50,14 +50,14 @@ export default (props: layoutBoxProps) => {
     const { onStyleChange, unit = 'px', styleData } = props;
     const value = styleData[styleKey] || 0;
     if (key == KEY_ARROW_DOWN) {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey,
           value: addUnit(parseInt(value) - 1, unit),
         },
       ]);
     } else if (key == KEY_ARROW_UP) {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey,
           value: addUnit(parseInt(value) + 1, unit),

@@ -74,7 +74,7 @@ export default class RadioGroupSetter extends React.PureComponent<
         };
       }
     });
-    const otherProps = {};
+    const otherProps: { children?: React.ReactNode[] } = {};
     if (hasImg) {
       otherProps.children = this.renderLabel(dataSource);
     }

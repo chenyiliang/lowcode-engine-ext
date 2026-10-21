@@ -33,11 +33,11 @@ export default (props: fontProps) => {
 
   const { fontWeight, textAlign } = fontConfig;
 
-  const onNumberChange = (styleKey: string, value: number, unit?: string) => {
-    onStyleChange([
+  const onNumberChange = (styleKey: string, value: number | null, unit?: string) => {
+    onStyleChange?.([
       {
         styleKey,
-        value: unit ? addUnit(value, unit) : value,
+        value: unit && value != null ? addUnit(value, unit) : value,
       },
     ]);
   };
@@ -75,7 +75,7 @@ export default (props: fontProps) => {
             style={{ width: '100%' }}
             value={styleData.fontWeight}
             hasClear={true}
-            onChange={(val) => onStyleChange([{ styleKey: 'fontWeight', value: val }])}
+            onChange={(val) => onStyleChange?.([{ styleKey: 'fontWeight', value: String(val ?? '') }])}
           />
         </Row>
         <Row title={fontConfig.fontFamily} styleData={styleData} styleKey="">
@@ -84,7 +84,7 @@ export default (props: fontProps) => {
             style={{ width: '100%' }}
             value={styleData.fontFamily}
             hasClear={true}
-            onChange={(val) => onStyleChange([{ styleKey: 'fontFamily', value: val }])}
+            onChange={(val) => onStyleChange?.([{ styleKey: 'fontFamily', value: String(val ?? '') }])}
           />
         </Row>
 
@@ -104,7 +104,7 @@ export default (props: fontProps) => {
             <Range
               style={{ marginRight: '7px' }}
               value={!isEmptyValue(styleData.opacity) ? styleData.opacity * 100 : 0}
-              onChange={(val) => onNumberChange('opacity', parseInt(val) / 100)}
+              onChange={(val) => onNumberChange('opacity', parseInt(String(val), 10) / 100)}
             />
             <NumberPicker
               value={
@@ -112,7 +112,7 @@ export default (props: fontProps) => {
               }
               max={100}
               min={0}
-              onChange={(val) => onNumberChange('opacity', isEmptyValue(val) ? null : val / 100)}
+              onChange={(val) => onNumberChange('opacity', val == null ? null : parseFloat(String(val)) / 100)}
             />
           </div>
         </Row>

@@ -2,6 +2,14 @@ import * as React from 'react';
 import { Box, Input, Radio } from '@alifd/next';
 import { BehaviorActionProps, BehaviorAction } from '../types';
 
+// findReact 会被序列化进生成的代码（见文件末尾 `${findReact}`），
+// 因此这里只做类型标注（编译期擦除，不改变序列化后的运行时行为）。
+interface ReactFiberLike {
+  return: ReactFiberLike;
+  type?: unknown;
+  stateNode?: any;
+}
+
 const findReact = (id: string, traverseUp = 0) => {
   const dom = document.querySelector(`#${id}`);
   if (!dom) return;
@@ -11,7 +19,8 @@ const findReact = (id: string, traverseUp = 0) => {
       item.startsWith('__reactInternalInstance$')
     ); // react <17
   });
-  const domFiber = dom[key];
+  // key 可能为 undefined（找不到 fiber 键），此时 dom[undefined] 与旧行为一致，返回 undefined
+  const domFiber = (dom as Record<string, any>)[key as string];
   if (domFiber == null) return null;
 
   // react <16
@@ -24,7 +33,7 @@ const findReact = (id: string, traverseUp = 0) => {
   }
 
   // react 16+
-  const GetCompFiber = (fiber) => {
+  const GetCompFiber = (fiber: ReactFiberLike): ReactFiberLike => {
     // return fiber._debugOwner; // this also works, but is __DEV__ only
     let parentFiber = fiber.return;
     while (typeof parentFiber.type === 'string') {
@@ -101,7 +110,7 @@ export const tooltipBehaviorAction: BehaviorAction<TooltipActionValue, TooltipAc
   toActionValue: (value, options) => ({
     type: 'JSExpression',
     value: `function() {
-      const id = '${options.id}';
+      const id = '${options?.id ?? ''}';
       const findReact = ${findReact};
       const node = findReact(id);
       if (!node) return;

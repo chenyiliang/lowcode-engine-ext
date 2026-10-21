@@ -6,8 +6,9 @@ const { intl } = common?.utils?.createIntl?.({
   'en-US': enUS,
   'zh-CN': zhCN,
 }) || {
-  intl: (id) => {
-    return zhCN[id];
+  // 兜底实现：直接用中文语言包按 key 取值
+  intl: (id: string): string => {
+    return (zhCN as Record<string, string>)[id];
   }
 };
 

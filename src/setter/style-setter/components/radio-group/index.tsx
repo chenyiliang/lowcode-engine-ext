@@ -7,19 +7,20 @@ import './index.less';
 const RadioGroup = Radio.Group;
 
 interface radioProps {
-  dataList: Array<RadioItem>;
+  // row 里 dataList 是可选的；渲染处已用 `dataList && dataList.map(...)` 兜底
+  dataList?: Array<RadioItem>;
   styleKey: string;
   // styleData?: StyleData | any;
   onStyleChange?: onStyleChange;
   // 某些时候值并不是直接从StyleData中获取的，value值提供了外部定义的扩展
-  value: string;
+  value?: StyleData['value'];
 }
 
 export default (props: radioProps) => {
   const { dataList, styleKey, onStyleChange, value } = props;
 
   const onRadioChange = (key: string, val: string | number | boolean) => {
-    onStyleChange([
+    onStyleChange?.([
       {
         styleKey: key,
         value: val,
@@ -27,9 +28,13 @@ export default (props: radioProps) => {
     ]);
   };
 
-  const onRadioItemClick = (key: string, val: string | number | boolean, value: string) => {
+  const onRadioItemClick = (
+    key: string,
+    val: string | number | boolean,
+    value: StyleData['value'],
+  ) => {
     if (value == val) {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey: key,
           value: null,
@@ -96,7 +101,7 @@ export default (props: radioProps) => {
         </RadioGroup>
       )} */}
       <RadioGroup
-        value={value}
+        value={value ?? undefined}
         shape="button"
         onChange={(val) => onRadioChange(styleKey, val)}
         // onClick={(event) => {

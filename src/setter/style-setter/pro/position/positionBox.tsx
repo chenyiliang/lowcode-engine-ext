@@ -10,20 +10,20 @@ const KEY_ARROW_UP = 'ArrowUp';
 
 interface positionBoxProps {
   styleData: StyleData | any;
-  onStyleChange: onStyleChange;
-  unit?: 'px';
+  onStyleChange?: onStyleChange;
+  unit?: string;
 }
 
 const positionConfig = intlLocal();
 
 export default (props: positionBoxProps) => {
-  const { onStyleChange, styleData, unit } = props;
+  const { onStyleChange, styleData, unit = 'px' } = props;
   const { positionTemplete } = positionConfig;
-  const onInputChange = (styleKey: string, value: string) => {
+  const onInputChange = (styleKey: string, value: string | number) => {
     if (value != '') {
       // 判断是否是数字
-      if (!isNaN(parseInt(value))) {
-        onStyleChange([
+      if (!isNaN(parseInt(String(value)))) {
+        onStyleChange?.([
           {
             styleKey,
             value: addUnit(value, unit),
@@ -31,7 +31,7 @@ export default (props: positionBoxProps) => {
         ]);
       }
     } else {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey,
           value: null,
@@ -44,14 +44,14 @@ export default (props: positionBoxProps) => {
     const { onStyleChange, unit = 'px', styleData } = props;
     const value = styleData[styleKey] || 0;
     if (key == KEY_ARROW_DOWN) {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey,
           value: addUnit(parseInt(value) - 1, unit),
         },
       ]);
     } else if (key == KEY_ARROW_UP) {
-      onStyleChange([
+      onStyleChange?.([
         {
           styleKey,
           value: addUnit(parseInt(value) + 1, unit),
@@ -64,7 +64,7 @@ export default (props: positionBoxProps) => {
     // 解析模板的值
     styleDataList.map((item) => {
       if (item.value == 'topLeft') {
-        onStyleChange([
+        onStyleChange?.([
           {
             styleKey: 'top',
             value: 0,
@@ -83,7 +83,7 @@ export default (props: positionBoxProps) => {
           },
         ]);
       } else if (item.value === 'topRight') {
-        onStyleChange([
+        onStyleChange?.([
           {
             styleKey: 'top',
             value: 0,
@@ -102,7 +102,7 @@ export default (props: positionBoxProps) => {
           },
         ]);
       } else if (item.value === 'bottomLeft') {
-        onStyleChange([
+        onStyleChange?.([
           {
             styleKey: 'top',
             value: null,
@@ -121,7 +121,7 @@ export default (props: positionBoxProps) => {
           },
         ]);
       } else if (item.value === 'bottomRight') {
-        onStyleChange([
+        onStyleChange?.([
           {
             styleKey: 'top',
             value: null,

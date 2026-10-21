@@ -1,8 +1,13 @@
 import React, { PureComponent } from 'react';
 import { Select } from '@alifd/next';
+import type { DataSourceItem } from '@alifd/next/types/select';
 
 interface SelectSetterProps {
-  onChange: (value: string) => undefined;
+  /**
+   * Fusion Select.onChange 回传 `DataSourceItem | DataSourceItem[]`
+   * （单选为单值，多选/标签模式为数组），这里按真实签名声明。
+   */
+  onChange: (value: DataSourceItem | DataSourceItem[]) => void;
   value?: any;
   mode?: 'single' | 'multiple' | 'tag';
   defaultValue?: any;

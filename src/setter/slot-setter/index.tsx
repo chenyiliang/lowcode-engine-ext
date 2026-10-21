@@ -105,7 +105,7 @@ export default class SlotSetter extends Component<{
       const templateName = value?.name || (isOpenSlot ? 'jsslot' : 'disable');
       switchComponent = (
         <Select
-          dataSource={templates}
+          dataSource={templates.map((t) => ({ label: t.label, value: t.value }))}
           defaultValue={templateName}
           onChange={this.onTemplateChange}
           autoWidth={false}
@@ -136,9 +136,9 @@ export default class SlotSetter extends Component<{
             addonTextBefore="入参"
             placeholder="插槽入参，以逗号分隔"
             value={value.params!.join(',')}
-            onChange={(val) => {
-              val = val.trim();
-              const params = val ? val.split(/ *, */) : [];
+            onChange={(val: string | number) => {
+              const text = String(val).trim();
+              const params = text ? text.split(/ *, */) : [];
               onChange &&
                 onChange({
                   ...value,

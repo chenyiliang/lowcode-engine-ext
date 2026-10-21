@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import { Dialog, Input, Button, Icon, Tree } from '@alifd/next';
+import type { DataNode, NodeInstance } from '@alifd/next/types/tree';
 import { PluginProps } from '@alilc/lowcode-types';
 import { event, project } from '@alilc/lowcode-engine';
 import MonacoEditor from '@alilc/lowcode-plugin-base-monaco-editor';
@@ -48,8 +49,62 @@ const defaultEditorOption = {
   }
 };
 
-export default class VariableBindDialog extends Component<PluginProps> {
-  state = {
+/**
+ * `PluginConfig.props` 只声明了通用字段，本插件额外从宿主读取以下自定义配置，
+ * 这里显式补充类型，避免用 `any` 直接访问。
+ */
+interface VariableBindDialogConfigProps {
+  /** 绑定变量最大字符数 */
+  maxTextSize?: number;
+  /** 宿主注入的额外变量分组 */
+  extraDataMap?: Record<string, VariableGroup>;
+  /** 自定义取 schema 的方法 */
+  getSchema?: () => any;
+}
+
+/** 变量绑定面板操作的低代码字段模型（只用到读写值两个方法） */
+interface BindField {
+  getValue: () => any;
+  setValue: (value: any) => void;
+}
+
+/** 变量树的一个节点 */
+interface VariableTreeItem {
+  label: string;
+  key?: string;
+  children?: VariableTreeItem[];
+}
+
+/** 左侧变量列表的一个分组 */
+interface VariableGroup {
+  name?: string;
+  key?: string;
+  childrens?: VariableTreeItem[];
+  getChildren?: () => VariableTreeItem[];
+}
+
+interface VariableBindDialogState {
+  visiable: boolean;
+  isOverFlowMaxSize: boolean;
+  helpText: string;
+  jsCode: string;
+  searchValue: string;
+  variableListMap: Record<string, VariableGroup>; // 变量列表
+  selParentVariable: string | null; // 选中的父级变量
+  childrenVariableList: VariableTreeItem[]; // 子级变量列表
+  field: BindField; // 编辑器全局变量
+  treeList: VariableTreeItem[];
+  minimize: boolean; // 是否最小化
+  autoExpandParent: boolean;
+  expandedKeys: string[];
+  maxTextSize: number; // 绑定变量最大字符数
+}
+
+export default class VariableBindDialog extends Component<
+  PluginProps,
+  VariableBindDialogState
+> {
+  state: VariableBindDialogState = {
     visiable: false,
     isOverFlowMaxSize:false,
     // stateVaroableList: [],
@@ -60,41 +115,55 @@ export default class VariableBindDialog extends Component<PluginProps> {
     variableListMap: {}, // 变量列表
     selParentVariable: null, // 选中的父级变量
     childrenVariableList: [], // 子级变量列表
-    field: {}, // 编辑器全局变量
+    field: {} as BindField, // 编辑器全局变量
     treeList: [],
     minimize: false, // 是否最小化
     autoExpandParent: true,
     expandedKeys: [],
-    maxTextSize: this.props.config?.props?.maxTextSize || 0, // 绑定变量最大字符数
+    maxTextSize: this.configProps.maxTextSize || 0, // 绑定变量最大字符数
   };
 
-  private editorJsRef = React.createRef();
+  private editorJsRef = React.createRef<HTMLDivElement>();
 
   private monocoEditor: any;
 
-  private matchedKeys: null;
+  private matchedKeys: string[] | null = null;
+
+  private editorNode: HTMLDivElement | null = null;
+
+  /** 宿主通过 `config.props` 传入的自定义配置（补充 PluginConfig 未声明的字段） */
+  private get configProps(): VariableBindDialogConfigProps {
+    return (this.props.config?.props ?? {}) as VariableBindDialogConfigProps;
+  }
 
   get extraDataMap() {
-    return this.props.config.props?.extraDataMap;
+    return this.configProps.extraDataMap;
   }
 
   componentDidMount() {
-    event.on('common:variableBindDialog.openDialog', ({ field, maxTextSize }) => {
-      // 在触发事件时指定最大长度，根据传入的长度重置一下
-      const finalMaxTextSize = maxTextSize && typeof maxTextSize ? maxTextSize : this.props.config?.props?.maxTextSize || 0;
-      this.setState({
-        field,
-        maxTextSize: finalMaxTextSize,
-      }, () => {
-        this.initCode();
-        this.openDialog();
-      });
-    });
+    event.on(
+      'common:variableBindDialog.openDialog',
+      ({ field, maxTextSize }: { field: BindField; maxTextSize?: number }) => {
+        // 在触发事件时指定最大长度，根据传入的长度重置一下
+        const finalMaxTextSize =
+          maxTextSize && typeof maxTextSize ? maxTextSize : this.configProps.maxTextSize || 0;
+        this.setState(
+          {
+            field,
+            maxTextSize: finalMaxTextSize,
+          },
+          () => {
+            this.initCode();
+            this.openDialog();
+          },
+        );
+      },
+    );
   }
 
   exportSchema = () => {
     // 可以定制getSchema方法
-    return this.props.config?.props?.getSchema?.() || project.exportSchema();
+    return this.configProps.getSchema?.() || project.exportSchema();
   };
 
   initCode = () => {
@@ -142,12 +211,12 @@ export default class VariableBindDialog extends Component<PluginProps> {
    * @param  {String}
    * @return {Array}
    */
-  getVarableList(): any[] {
+  getVarableList(): VariableTreeItem[] {
     const schema = this.exportSchema();
 
     const stateMap = schema.componentsTree[0]?.state;
-    const dataSourceMap = {};
-    const dataSource = [];
+    const dataSourceMap: Record<string, any> = {};
+    const dataSource: string[] = [];
 
     for (const key in stateMap) {
       if (Object.prototype.hasOwnProperty.call(stateMap, key) && key) {
@@ -164,7 +233,7 @@ export default class VariableBindDialog extends Component<PluginProps> {
         }
       }
     }
-    const treeList = [];
+    const treeList: VariableTreeItem[] = [];
     this.walkNode(dataSourceMap, -1, treeList);
     // this.setState({
     //   treeList
@@ -180,10 +249,15 @@ export default class VariableBindDialog extends Component<PluginProps> {
    * @param path
    * @returns
    */
-  treeFindPath(tree, func, field = '', path = []) {
+  treeFindPath(
+    tree: VariableTreeItem[] | undefined,
+    func: (data: VariableTreeItem) => boolean,
+    field = '',
+    path: any[] = [],
+  ): any[] {
     if (!tree) return [];
     for (const data of tree) {
-      field === '' ? path.push(data) : path.push(data[field]);
+      field === '' ? path.push(data) : path.push((data as any)[field]);
       if (func(data)) return path;
       if (data.children) {
         const findChildren = this.treeFindPath(data.children, func, field, path);
@@ -200,12 +274,11 @@ export default class VariableBindDialog extends Component<PluginProps> {
    * @param deepNum
    * @param treeList
    */
-  walkNode(dataSourceMap, deepNum, treeList) {
+  walkNode(dataSourceMap: Record<string, any>, deepNum: number, treeList: VariableTreeItem[]) {
     deepNum++;
     let index = 0;
     for (const key in dataSourceMap) {
-      const treeData = {};
-      treeData.label = key;
+      const treeData: VariableTreeItem = { label: key };
       // treeData.key = deepNum+'_'+index;
       if (typeof dataSourceMap[key] === 'object' && !(dataSourceMap[key] instanceof Array)) {
         treeData.children = [];
@@ -245,19 +318,19 @@ export default class VariableBindDialog extends Component<PluginProps> {
    * @param  {Array}
    * @return {Array}
    */
-  getContextKeys(keys?: []) {
+  getContextKeys(keys?: string[]): string[] {
     const { editor } = this.props;
     const limitKeys = ['schema', 'utils', 'constants'];
     if (!keys || keys.length === 0) return limitKeys;
     if (!limitKeys.includes(keys[0])) return [];
-    let result = [];
-    let keyValue = editor;
+    let result: string[] = [];
+    let keyValue: any = editor;
     let assert = false;
     keys.forEach((item) => {
-      if (!keyValue[item] || typeof keyValue[item] !== 'object') {
+      if (!keyValue?.[item] || typeof keyValue[item] !== 'object') {
         assert = true;
       }
-      if (keyValue[item]) {
+      if (keyValue?.[item]) {
         keyValue = keyValue[item];
       }
     });
@@ -304,7 +377,9 @@ export default class VariableBindDialog extends Component<PluginProps> {
     });
   };
 
-  onSelectItem = (value: string) => {
+  onSelectItem = (value?: string) => {
+    // selectLabel 在未命中任何分组时可能为 undefined，此时不插入内容
+    if (value === undefined) return;
     const { lineNumber, column } = this.monocoEditor.getPosition();
     this.monocoEditor.executeEdits('insert-code', [
       {
@@ -319,7 +394,7 @@ export default class VariableBindDialog extends Component<PluginProps> {
     ]);
   };
 
-  updateCode = (newCode) => {
+  updateCode = (newCode: string) => {
 
     let isOverFlowMaxSize = false;
     if (this.state.maxTextSize) {
@@ -342,7 +417,9 @@ export default class VariableBindDialog extends Component<PluginProps> {
     }
   };
 
-  editorDidMount = (editor) => {
+  // MonacoEditor 的 editorDidMount 回调签名为 (monaco, editor)，调用处会把 editor 放在
+  // 第一个参数传入；第二个参数（monaco 实例）此处不使用，仅为匹配 `.call(this, editor, useMonaco)`。
+  editorDidMount = (editor: any, _useMonaco?: any) => {
     this.monocoEditor = editor;
 
     setTimeout(() => {
@@ -350,7 +427,11 @@ export default class VariableBindDialog extends Component<PluginProps> {
     }, 0);
   };
 
-  onOk = (autoSave) => {
+  /**
+   * @param autoSaveOrEvent 由 `autoSave()` 传 `true`；由按钮 onClick 传入时是事件对象，
+   * 只有恰好等于 `true` 时才不关闭弹窗，与原有语义一致。
+   */
+  onOk = (autoSaveOrEvent?: boolean | React.MouseEvent) => {
     const { field, jsCode } = this.state;
     const fieldValue = field.getValue();
     field.setValue({
@@ -361,7 +442,7 @@ export default class VariableBindDialog extends Component<PluginProps> {
           ? fieldValue.mock
           : fieldValue,
     });
-    if (autoSave !== true) {
+    if (autoSaveOrEvent !== true) {
       this.closeDialog();
     }
   };
@@ -402,33 +483,34 @@ export default class VariableBindDialog extends Component<PluginProps> {
     );
   };
 
-  handleExpand = (keys) => {
+  handleExpand = (keys: string[]) => {
     this.setState({
       expandedKeys: keys,
       autoExpandParent: false,
     });
   };
 
-  onVariableSearchChange = (value) => {
+  onVariableSearchChange = (value: string | number) => {
+    const searchValue = String(value ?? '');
     this.setState({
-      searchValue: value,
+      searchValue,
     });
 
     const { variableListMap, selParentVariable } = this.state;
-    const selectedVariable = variableListMap[selParentVariable];
+    const selectedVariable = selParentVariable ? variableListMap[selParentVariable] : undefined;
     if (!selectedVariable) {
       return;
     }
-    value = value.trim();
-    if (!value) {
+    const trimmed = searchValue.trim();
+    if (!trimmed) {
       this.matchedKeys = null;
       return;
     }
 
-    const matchedKeys = [];
-    const loop = (data) =>
-      data.forEach((item) => {
-        if (item.label.indexOf(value) > -1) {
+    const matchedKeys: string[] = [];
+    const loop = (data: VariableTreeItem[] | undefined) =>
+      data?.forEach((item) => {
+        if (item.label.indexOf(trimmed) > -1 && item.key) {
           matchedKeys.push(item.key);
         }
         if (item.children && item.children.length) {
@@ -446,11 +528,12 @@ export default class VariableBindDialog extends Component<PluginProps> {
   onVariableItemClick = (key: string) => {
     const { variableListMap } = this.state;
 
-    let childrenVariableList;
-    if (this.extraDataMap?.[key] && this.extraDataMap[key]?.getChildren?.()) {
-      childrenVariableList = this.extraDataMap[key].getChildren();
+    let childrenVariableList: VariableTreeItem[] | undefined;
+    const extraGroup = this.extraDataMap?.[key];
+    if (extraGroup && extraGroup.getChildren?.()) {
+      childrenVariableList = extraGroup.getChildren();
     } else {
-      childrenVariableList = variableListMap[key].childrens;
+      childrenVariableList = variableListMap[key]?.childrens;
     }
 
     // const matchedKeys = [];
@@ -467,24 +550,24 @@ export default class VariableBindDialog extends Component<PluginProps> {
 
     this.setState({
       selParentVariable: key,
-      childrenVariableList,
+      childrenVariableList: childrenVariableList ?? [],
       // matchedKeys
     });
   };
 
-  minimizeClick = (state) => {
+  minimizeClick = (state: boolean) => {
     this.setState({
       minimize: state,
       visiable: !state,
     });
   };
 
-  onSelectTreeNode = (selectedKeys, extra) => {
+  onSelectTreeNode = (selectedKeys: string[], extra: any) => {
     const { selParentVariable, childrenVariableList } = this.state;
 
     const label = extra.selectedNodes[0]?.props?.label;
     const key = extra.selectedNodes[0]?.key;
-    let selectLabel;
+    let selectLabel: string | undefined;
     if (selParentVariable == 'stateVaroableList') {
       const pathList = this.treeFindPath(childrenVariableList, (data) => data.key == key, 'label');
       selectLabel = `this.state.${pathList.join('.')}`;
@@ -495,7 +578,7 @@ export default class VariableBindDialog extends Component<PluginProps> {
     } else {
       const fondKey = Object.keys(this.extraDataMap || {}).find((k) => k === selParentVariable);
       if (fondKey) {
-        const propKey = this.extraDataMap[fondKey].key;
+        const propKey = this.extraDataMap?.[fondKey]?.key;
         const pathList = this.treeFindPath(
           childrenVariableList,
           (data: any) => data.key === key,
@@ -550,8 +633,9 @@ export default class VariableBindDialog extends Component<PluginProps> {
       isOverFlowMaxSize,
     } = this.state;
 
-    const filterTreeNode = (node) => {
-      return this.matchedKeys && this.matchedKeys.indexOf(node.props.eventKey) > -1;
+    // Fusion 要求 filterTreeNode 返回 boolean；matchedKeys 为 null（未搜索）时不过滤任何节点
+    const filterTreeNode = (node: NodeInstance): boolean => {
+      return !!this.matchedKeys && this.matchedKeys.indexOf(node.props.eventKey ?? '') > -1;
     };
 
     return (
@@ -593,7 +677,7 @@ export default class VariableBindDialog extends Component<PluginProps> {
                     return (
                       <li
                         onClick={() => this.onVariableItemClick(key)}
-                        className={selParentVariable === key && 'active'}
+                        className={selParentVariable === key ? 'active' : undefined}
                         key={key}
                       >
                         {variableListMap[key].name}
@@ -622,7 +706,10 @@ export default class VariableBindDialog extends Component<PluginProps> {
                       ))} */}
 
                     <Tree
-                      dataSource={childrenVariableList}
+                      // walkNode 构造的节点只有 label（key 省略），Fusion 运行时会自动生成
+                      // 位置化 eventKey 供 filterTreeNode/onSelect 使用；但 Fusion 的 DataNode
+                      // 类型把 key 标成必填。这里按库声明的类型在边界处显式转换（非 any）。
+                      dataSource={childrenVariableList as unknown as DataNode[]}
                       onSelect={this.onSelectTreeNode}
                       defaultExpandAll
                       filterTreeNode={filterTreeNode}
@@ -644,8 +731,8 @@ export default class VariableBindDialog extends Component<PluginProps> {
                   {...defaultEditorProps}
                   {...defaultEditorOption}
                   {...{ language: 'javascript' }}
-                  onChange={(newCode) => this.updateCode(newCode)}
-                  editorDidMount={(useMonaco, editor) => {
+                  onChange={(newCode: string) => this.updateCode(newCode)}
+                  editorDidMount={(useMonaco: any, editor: any) => {
                     this.editorDidMount.call(this, editor, useMonaco);
                   }}
                 />

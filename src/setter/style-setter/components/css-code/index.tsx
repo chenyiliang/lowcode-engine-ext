@@ -11,6 +11,14 @@ interface CodeProps {
   onStyleDataChange: (val: any) => void;
 }
 
+interface CodeState {
+  defaultEditorProps: Record<string, unknown>;
+  cssCode: string;
+  isCanSave: boolean;
+  height: string;
+  offsetX?: number;
+}
+
 const cssConfig = intlLocal();
 
 const defaultEditorOption = {
@@ -44,33 +52,37 @@ const defaultEditorOption = {
   },
 };
 
-export default class CssCode extends React.Component<CodeProps> {
-  state = {
+export default class CssCode extends React.Component<CodeProps, CodeState> {
+  state: CodeState = {
     defaultEditorProps: {},
     cssCode: '',
     isCanSave: true,
     height: '100px',
   };
 
-  componentWillReceiveProps(nextProps: CodeProps) {
-    const cssCode = parseToCssCode(nextProps.styleData);
-    this.setState({
-      cssCode,
-    });
-  }
-
   componentDidMount() {
-    const { styleData } = this.props;
-
     if (document.body.clientWidth >= 1860) {
       this.setState({
         offsetX: -400,
       });
     }
 
-    const cssCode = parseToCssCode(styleData);
+    const cssCode = parseToCssCode(this.props.styleData);
     // console.log('cssCode', cssCode);
 
+    this.setState({
+      cssCode,
+    });
+  }
+
+  /**
+   * React 19 已移除 `componentWillReceiveProps`，改用 `componentDidUpdate`。
+   * 原逻辑是每次收到新 props 都用 styleData 覆盖 cssCode，
+   * 这里保持等价语义：仅当 styleData 变化时覆盖，避免用户正在编辑时被同值 props 冲掉。
+   */
+  componentDidUpdate(prevProps: CodeProps) {
+    if (prevProps.styleData === this.props.styleData) return;
+    const cssCode = parseToCssCode(this.props.styleData);
     this.setState({
       cssCode,
     });

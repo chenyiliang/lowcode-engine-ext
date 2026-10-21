@@ -2,6 +2,7 @@ import { Component } from 'react';
 import * as React from 'react';
 import { event, project, skeleton } from '@alilc/lowcode-engine';
 import { Dialog, Search, Input, Balloon, Icon, Switch, Message } from '@alifd/next';
+import type { AlignType } from '@alifd/next/types/balloon';
 import { PluginProps } from '@alilc/lowcode-types';
 import MonacoEditor from '@alilc/lowcode-plugin-base-monaco-editor';
 import './index.less';
@@ -46,7 +47,16 @@ const SystemEventNameMap: any = {
   componentWillUnmount: true,
 };
 
-const HelpTip = (props) => {
+interface HelpTipProps {
+  children?: React.ReactNode;
+  className?: string;
+  align?: AlignType;
+  style?: React.CSSProperties;
+  iconStyle?: React.CSSProperties;
+  size?: 'xxs' | 'xs' | 'small' | 'medium' | 'large' | 'xl' | 'xxl' | 'xxxl' | 'inherit' | number;
+}
+
+const HelpTip = (props: HelpTipProps) => {
   const { children, className, align = 't', style = {}, iconStyle = {}, size = 'xs' } = props;
   const icon = <Icon style={iconStyle} size={size} type="help" />;
   const bConfig = {
@@ -160,9 +170,10 @@ export default class EventBindDialog extends Component<PluginProps> {
     });
   };
 
-  onInputChange = (eventName: string) => {
+  // Fusion Input.onChange 回传 (value: string | number, e, reason?)，这里统一转成字符串
+  onInputChange = (value: string | number) => {
     this.setState({
-      eventName,
+      eventName: String(value ?? ''),
     });
   };
 

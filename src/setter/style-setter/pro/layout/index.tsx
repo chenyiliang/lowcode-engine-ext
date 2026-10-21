@@ -36,7 +36,7 @@ export default (props: layoutProps) => {
   const { display, flexDirection, justifyContent, alignItems, flexWrap } = layoutConfig;
 
   const displayDataList = display.dataList.filter(
-    (item) => showDisPlayList.indexOf(item.value) >= 0,
+    (item: { value: string }) => showDisPlayList.indexOf(item.value) >= 0,
   );
 
   return (

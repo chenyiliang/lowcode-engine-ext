@@ -1,10 +1,10 @@
-import { SettingTarget } from '@alilc/lowcode-types';
+import { IPublicModelSettingTarget } from '@alilc/lowcode-types';
 
 export interface BehaviorActionProps<Value = Record<string, any>, Options = any> {
   value: Value;
   onChange: (val: Value) => void;
   options?: Options;
-  field: SettingTarget;
+  field: IPublicModelSettingTarget;
 }
 /** 自定义行为描述 */
 export interface BehaviorAction<Value = Record<string, any>, Options = Record<string, any>> {

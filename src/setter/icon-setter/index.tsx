@@ -63,17 +63,24 @@ const icons = [
   'list',
   'dashboard',
 ];
+/** type === 'node' 时，onChange 回传的是低代码组件节点而非字符串 */
+interface IconNodeValue {
+  componentName: string;
+  props: { type: string };
+}
+
 interface IconSetterProps {
   value: string;
   type: string;
   defaultValue: string;
   placeholder: string;
   hasClear: boolean;
-  onChange: (icon: string) => undefined;
+  /** string 模式回传图标名；node 模式回传 { componentName, props } 节点 */
+  onChange: (icon: string | IconNodeValue) => void;
   icons: string[];
 }
 interface IconSetterState {
-  setterValue: string | object | null;
+  setterValue: string | IconNodeValue | null;
 }
 
 export default class IconSetter extends PureComponent<IconSetterProps, IconSetterState> {
@@ -88,7 +95,12 @@ export default class IconSetter extends PureComponent<IconSetterProps, IconSette
   };
   static displayName = 'IconSetter';
 
-  static getDerivedStateFromProps(nextProps: any, prevState: any): any {
+  // 形参用 Partial：见 color-setter 同款说明（React 19 @types 对 ComponentClass<any> 的
+  // getDerivedStateFromProps 逆变检查更严，声明具体 Props 会让下游 registerSetter 报 TS2345）
+  static getDerivedStateFromProps(
+    nextProps: Partial<IconSetterProps>,
+    prevState: IconSetterState,
+  ): Partial<IconSetterState> | null {
     const { value, defaultValue } = nextProps;
     if (prevState.setterValue == null) {
       if (value === undefined && defaultValue) {
@@ -103,7 +115,7 @@ export default class IconSetter extends PureComponent<IconSetterProps, IconSette
     };
   }
 
-  state = {
+  state: IconSetterState = {
     setterValue: null,
   };
 
@@ -121,8 +133,9 @@ export default class IconSetter extends PureComponent<IconSetterProps, IconSette
     }
   };
 
-  onInputChange = (icon: string) => {
-    this._onChange(icon);
+  // Fusion Input.onChange 回传 `(value: string | number, e, reason?)`，窄化成字符串
+  onInputChange = (icon: string | number) => {
+    this._onChange(String(icon));
   };
 
   onSelectIcon = (icon: string) => {

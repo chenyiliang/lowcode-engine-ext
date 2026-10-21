@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Select, Box, Input } from '@alifd/next';
+import type { DataSourceItem } from '@alifd/next/types/select';
 import { BehaviorActionProps, BehaviorAction } from '../types';
 
 interface MessageActionValue {
@@ -27,7 +28,7 @@ const MessageActionContent: React.FC<BehaviorActionProps<MessageActionValue, Mes
   value = {}, onChange, options,
 }) => {
   fillDefaultValue(value);
-  const { types } = options;
+  const { types } = options || {};
   return (
     <Box>
       <Box direction="row" align="center" className="behavior-item">
@@ -38,10 +39,10 @@ const MessageActionContent: React.FC<BehaviorActionProps<MessageActionValue, Mes
             dataSource={types}
             defaultValue="notice"
             value={value?.type || 'notice'}
-            onChange={(val) => {
+            onChange={(val: DataSourceItem | DataSourceItem[]) => {
               onChange({
                 ...value,
-                type: val,
+                type: val == null ? undefined : String(val),
               });
             }}
           />
@@ -72,7 +73,7 @@ export const messageBehaviorAction: BehaviorAction<MessageActionValue, MessageAc
   title: '提示',
   render: (props) => <MessageActionContent {...props} />,
   toActionValue: (value, options) => {
-    const { library, component, defaultType } = options;
+    const { library, component, defaultType } = options || ({} as MessageActionOptions);
     return {
       type: 'JSExpression',
       value: `function() {${library}.${component}.${value.type || defaultType}('${value.content}')}`,

@@ -1,4 +1,3 @@
-import { StyleData } from './types';
 import { toCSS, toJSON } from 'cssjson';
 
 function getComputePropertyValue(node: any, property: string) {
@@ -24,14 +23,14 @@ export function getPlaceholderPropertyValue(field: any, property: string) {
     if (property != 'backgroundColor') {
       return removeUnit(propertyValue);
     } else {
-      return hexify(propertyValue);
+      return hexify(propertyValue as string);
     }
   }
 
   return propertyValue;
 }
 
-export function removeUnit(value: string) {
+export function removeUnit(value: string | null | undefined) {
   if (value != undefined && value != null) {
     return parseInt(value);
   }
@@ -91,8 +90,12 @@ export function hexify(color: string) {
   );
 }
 
-export function parseToCssCode(styleData: StyleData) {
-  const parseStyleData: any = {};
+/**
+ * 入参是样式键值映射（如 `{ color: 'red', margin: '0 10px' }`），
+ * 与 `StyleData`（单个 { styleKey, value } 项）不是一回事。
+ */
+export function parseToCssCode(styleData: Record<string, any>) {
+  const parseStyleData: Record<string, string> = {};
   for (const styleKey in styleData) {
     parseStyleData[toLine(styleKey)] = styleData[styleKey];
   }
@@ -110,22 +113,22 @@ export function parseToCssCode(styleData: StyleData) {
 }
 
 export function parseToStyleData(cssCode: string) {
-  const styleData = {};
+  const styleData: Record<string, string> = {};
   try {
     const cssJson = toJSON(cssCode);
     const cssJsonData = cssJson?.children?.['#main']?.attributes;
     for (const key in cssJsonData) {
-      styleData[toHump(key)] = cssJsonData[key];
+      styleData[toHump(key)] = cssJsonData![key];
     }
     // 转化key
   } catch (e) {
-    console.error(e.message);
+    console.error((e as Error).message);
   }
 
   return styleData;
 }
 // 多参数样式解析单个参数
-export const parseValue = (styleValue: String, valueIndex: number) => {
+export const parseValue = (styleValue: string, valueIndex: number) => {
   if (!styleValue) return;
   const styleArray = styleValue?.split(' ') || [];
   const value = styleArray[valueIndex];

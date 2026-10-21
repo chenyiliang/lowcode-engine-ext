@@ -44,8 +44,9 @@ export default class NumberSetter extends React.PureComponent<
         precision={precision}
         step={step}
         innerAfter={units}
-        onChange={(val: number) => {
-          onChange(!val ? 0 : val);
+        onChange={(val: string | number | undefined) => {
+          // NumberPicker 清空时回传 undefined/''，统一成 0
+          onChange(!val ? 0 : Number(val));
         }}
       />
     );

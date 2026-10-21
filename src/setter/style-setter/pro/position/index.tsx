@@ -24,8 +24,8 @@ export default (props: layoutProps) => {
 
   const { isShowFloat, isShowClear } = positionPropsConfig;
 
-  const onZIndexChange = (zIndex: number) => {
-    onStyleChange([{ styleKey: 'zIndex', value: zIndex }]);
+  const onZIndexChange = (zIndex: number | string | undefined) => {
+    onStyleChange?.([{ styleKey: 'zIndex', value: zIndex == null ? null : Number(zIndex) }]);
   };
 
   const initData = () => {};
@@ -42,12 +42,12 @@ export default (props: layoutProps) => {
             dataSource={position.dataList}
             value={styleData.position}
             hasClear
-            onChange={(val) => onStyleChange([{ styleKey: 'position', value: val }])}
+            onChange={(val) => onStyleChange?.([{ styleKey: 'position', value: String(val ?? '') }])}
           />
         </Row>
 
         {styleData.position && styleData.position != 'static' && (
-          <PositionBox styleData={styleData} onStyleChange={onStyleChange} {...props} />
+          <PositionBox {...props} />
         )}
 
         <Row title={'zIndex'} styleData={styleData} styleKey="zIndex">

@@ -28,7 +28,6 @@ import EventBindDialog from './plugin/plugin-event-bind-dialog';
 import VariableBindDialog from './plugin/plugin-variable-bind-dialog';
 import SimpleVariableBindPopup from './plugin/plugin-simple-bind-popup'
 import './index.less';
-import packagesInfo from '../package.json';
 // suggest: 做成 StringSetter 的一个参数，
 // export const TextAreaSetter = {
 //   component: TextAreaSetter,
@@ -47,8 +46,19 @@ export const DateRangeSetter = DatePicker.RangePicker;
 
 export { ExpressionSetter, EventsSetter, JsonSetter, IconSetter };
 
+interface StringDateSetterProps {
+  value?: any;
+  showTime?: any;
+  onChange?: (value: any) => void;
+}
+
+interface StringTimePickerProps {
+  value?: any;
+  onChange?: (value: any) => void;
+}
+
 // eslint-disable-next-line react/no-multi-comp
-class StringDateSetter extends Component {
+class StringDateSetter extends Component<StringDateSetterProps> {
   render() {
     const { onChange, value, showTime } = this.props;
     return (
@@ -56,7 +66,9 @@ class StringDateSetter extends Component {
         value={moment(value)}
         showTime={showTime}
         onChange={(val) => {
-          onChange(val ? val.format() : val);
+          // Fusion 的 onChange 回传 `Moment | string`（清空时为 ''），
+          // 只在拿到 Moment 实例时才 format，清空则原样回传空值。
+          onChange?.(moment.isMoment(val) ? val.format() : val);
         }}
       />
     );
@@ -64,14 +76,14 @@ class StringDateSetter extends Component {
 }
 
 // eslint-disable-next-line react/no-multi-comp
-class StringTimePicker extends Component {
+class StringTimePicker extends Component<StringTimePickerProps> {
   render() {
     const { onChange, value } = this.props;
     return (
       <TimePicker
         value={moment(value)}
         onChange={(val) => {
-          onChange(val ? val.format('HH:mm:ss') : val);
+          onChange?.(moment.isMoment(val) ? val.format('HH:mm:ss') : val);
         }}
       />
     );
@@ -145,8 +157,13 @@ const DataObjectSetter = {
 
 const DataSlotSetter = {
   component: SlotSetter,
+  // `as const` 保持 type 为字面量 'i18n'：否则对象字面量会被推宽成 string，
+  // 匹配不上 IPublicTypeTitleContent 里的 IPublicTypeI18nData（其 type: 'i18n' 是字面量），
+  // 导致下游 registerSetter(setterMap) 报 TS2345。
+  // 这里刻意不整体标注成 IPublicTypeRegisteredSetter —— 该接口没有 valueType 字段，
+  // 标注反而会触发多余属性检查。valueType 的类型缺口由 engine 侧补（见 CONVENTIONS 待办）。
   title: {
-    type: 'i18n',
+    type: 'i18n' as const,
     'zh-CN': '插槽输入',
     'en-US': 'Slot Setter',
   },
@@ -166,7 +183,13 @@ const DataSlotSetter = {
   valueType: ['JSSlot'],
 };
 
+/**
+ * 版本号由 vite.config.ts 的 `define` 在构建期注入，
+ * 替代原先的 `import packagesInfo from '../package.json'`——
+ * package.json 在 src 之外，会让 vite-plugin-dts 把它的声明吐到 dist 之外。
+ */
 const engineExt = {
+  version: __ENGINE_EXT_VERSION__,
   setters: {
     StringSetter,
     NumberSetter,
@@ -231,7 +254,6 @@ const engineExt = {
     SimpleVariableBindPopup,
   },
 };
-engineExt.version = packagesInfo.version;
 window.AliLowCodeEngineExt = engineExt;
 console.log(
   '%c AliLowCodeExt %c v'.concat(engineExt.version, ' '),

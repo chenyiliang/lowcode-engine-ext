@@ -1,13 +1,15 @@
-import React, { Component, ComponentClass } from 'react';
+import React, { Component, ComponentClass, ReactNode } from 'react';
 import classNames from 'classnames';
 import { Dropdown, Menu } from '@alifd/next';
-import { common, setters, SettingField } from '@alilc/lowcode-engine';
+import { common, setters } from '@alilc/lowcode-engine';
 import {
-  SetterConfig,
-  CustomView,
-  DynamicProps,
-  DynamicSetter,
-  TitleContent,
+  IPublicModelSettingField,
+  IPublicTypeSetterConfig,
+  IPublicTypeCustomView,
+  IPublicTypeDynamicProps,
+  IPublicTypeDynamicSetter,
+  IPublicTypeTitleContent,
+  IPublicTypeRegisteredSetter,
   isSetterConfig,
   isDynamicSetter,
 } from '@alilc/lowcode-types';
@@ -23,63 +25,69 @@ const { computed, obx, Title, createSetterContent, observer, shallowIntl } = edi
 const { getSetter, getSettersMap } = setters;
 export interface SetterItem {
   name: string;
-  title: TitleContent;
-  setter: string | DynamicSetter | CustomView;
-  props?: object | DynamicProps;
-  condition?: (field: SettingField) => boolean;
-  initialValue?: any | ((field: SettingField) => any);
+  title: IPublicTypeTitleContent;
+  setter: string | IPublicTypeDynamicSetter | IPublicTypeCustomView;
+  props?: object | IPublicTypeDynamicProps;
+  condition?: (field: IPublicModelSettingField) => boolean;
+  initialValue?: any | ((field: IPublicModelSettingField) => any);
   list: boolean;
-  valueType: string[];
+  valueType?: string[];
 }
 
 const dash = '_';
-function getMixedSelect(field) {
+function getMixedSelect(field: IPublicModelSettingField) {
   const path = field.path || [];
-  if(path.length) {
+  // field.node 类型上是 IPublicModelNode | null，旧代码未判空（旧 build-scripts 走 babel 转译、
+  // 从不做类型检查，所以没暴露）。这里取一次并守卫，同时避免多次可空访问。
+  const node = field.node;
+  if (path.length && node) {
     const key = `_unsafe_MixedSetter${dash}${path[path.length-1]}${dash}select`
     const newPath = [...path];
     newPath.splice(path.length - 1, 1, key);
-    const newKey = field.node.getPropValue(newPath.join('.'))
+    const newKey = node.getPropValue(newPath.join('.'))
     if(newKey) return newKey;
     // 兼容下以前的问题情况，如果捕获到，获取 oldUnsafeKey 取值并将其直接置空
     const oldUnsafeKey = `_unsafe_MixedSetter${dash}${path.join(dash)}${dash}select`;
-    const oldUsedSetter = field.node.getPropValue(oldUnsafeKey);
+    const oldUsedSetter = node.getPropValue(oldUnsafeKey);
     if(oldUsedSetter) {
-      field.node.setPropValue(newPath.join('.'), oldUsedSetter);
-      field.node.setPropValue(oldUnsafeKey, undefined);
+      node.setPropValue(newPath.join('.'), oldUsedSetter);
+      node.setPropValue(oldUnsafeKey, undefined);
     }
     return oldUsedSetter;
   }
   return undefined;
 }
-function setMixedSelect(field, usedSetter) {
+function setMixedSelect(field: IPublicModelSettingField, usedSetter?: string) {
   const path = field.path || [];
-  if(path.length) {
+  const node = field.node;
+  if (path.length && node) {
     const key = `_unsafe_MixedSetter${dash}${path[path.length-1]}${dash}select`
     path.splice(path.length - 1, 1, key);
-    field.node.setPropValue(path.join('.'), usedSetter)
+    node.setPropValue(path.join('.'), usedSetter)
   }
 }
 
 function nomalizeSetters(
-  setters?: Array<string | SetterConfig | CustomView | DynamicSetter>,
+  setters?: Array<string | IPublicTypeSetterConfig | IPublicTypeCustomView | IPublicTypeDynamicSetter>,
 ): SetterItem[] {
   if (!setters) {
     const normalized: SetterItem[] = [];
-    getSettersMap().forEach((setter, name) => {
-      if (name === 'MixedSetter') {
-        return;
-      }
-      normalized.push({
-        name,
-        title: setter.title || name,
-        setter: name,
-        condition: setter.condition,
-        initialValue: setter.initialValue,
-        list: setter.recommend || false,
-        valueType: setter.valueType,
-      });
-    });
+    getSettersMap().forEach(
+      (setter: IPublicTypeRegisteredSetter & { valueType?: string[] }, name: string) => {
+        if (name === 'MixedSetter') {
+          return;
+        }
+        normalized.push({
+          name,
+          title: setter.title || name,
+          setter: name,
+          condition: setter.condition,
+          initialValue: setter.initialValue,
+          list: setter.recommend || false,
+          valueType: setter.valueType,
+        });
+      },
+    );
 
     return normalized;
   }
@@ -156,15 +164,17 @@ interface VariableSetter extends ComponentClass {
   show(params: object): void;
 }
 
-@observer
-class MixedSetter extends Component<{
-  field: SettingField;
-  setters?: Array<string | SetterConfig | CustomView | DynamicSetter>;
-  onSetterChange?: (field: SettingField, name: string) => void;
+interface MixedSetterProps {
+  field: IPublicModelSettingField;
+  setters?: Array<string | IPublicTypeSetterConfig | IPublicTypeCustomView | IPublicTypeDynamicSetter>;
+  onSetterChange?: (field: IPublicModelSettingField, name: string) => void;
   onChange?: (val: any) => void;
   value?: any;
   className?: string;
-}> {
+}
+
+@observer
+class MixedSetter extends Component<MixedSetterProps> {
   private fromMixedSetterSelect = false;
 
   private setters = nomalizeSetters(this.props.setters);
@@ -195,7 +205,7 @@ class MixedSetter extends Component<{
     return firstMatched || firstDefault || this.setters[0];
   }
 
-  constructor(props) {
+  constructor(props: MixedSetterProps) {
     super(props);
     // TODO: use engine ext.props
     const usedSetter = getMixedSelect(this.props.field);
@@ -232,11 +242,11 @@ class MixedSetter extends Component<{
     let fieldValue;
     const usedSetter = this.setters.find((item) => item.name === usedName);
     // 获取该setter的返回值类型
-    const usedValueType = usedSetter.valueType || ['string'];
+    const usedValueType = usedSetter?.valueType || ['string'];
 
     const setter = this.setters.find((item) => item.name === name);
 
-    const valueType = setter.valueType || ['string'];
+    const valueType = setter?.valueType || ['string'];
 
     usedValueType.map((usedItem) => {
       valueType.map((item) => {
@@ -255,14 +265,14 @@ class MixedSetter extends Component<{
     }
   };
 
-  private syncSelectSetter(name) {
+  private syncSelectSetter(name?: string) {
     // TODO: sync into engine ext.props
     const { field } = this.props;
     this.used = name;
     setMixedSelect(field, name);
   }
 
-  private handleInitial({ initialValue }: SetterItem, fieldValue: string) {
+  private handleInitial({ initialValue }: SetterItem, fieldValue?: string) {
     const { field, onChange } = this.props;
     let newValue: any = initialValue;
     if (newValue && typeof newValue === 'function') {
@@ -411,9 +421,9 @@ class MixedSetter extends Component<{
   }
 
   private renderSwitchAction(currentSetter?: SetterItem) {
-    const usedName = currentSetter?.name || this.used;
+    const usedName = currentSetter?.name || this.used || '';
     const triggerNode = (
-      <div ref={ref => this.triggerNodeRef = ref}>
+      <div ref={(ref) => { this.triggerNodeRef = ref; }}>
         <Title
           title={{
             tip: intlNode('Switch Setter'),
@@ -430,7 +440,7 @@ class MixedSetter extends Component<{
           selectMode="single"
           hasSelectedIcon
           selectedKeys={usedName}
-          onItemClick={(name) => this.useSetter(name, usedName)}
+          onItemClick={(name: string) => this.useSetter(name, usedName)}
         >
           {this.setters
             .filter((setter) => setter.list || setter.name === usedName)
@@ -491,7 +501,11 @@ class MixedSetter extends Component<{
     );
   }
 }
-interface MixedSetterType extends ComponentClass {
+/**
+ * 导出该接口：MixedSetter 是本包 default export（并被 `engineExt` 再导出），
+ * 声明文件生成器需要能按名字引用它，否则报 TS4023「cannot be named」。
+ */
+export interface MixedSetterType extends ComponentClass {
   controller: typeof MixedSetterController;
 }
 export default MixedSetter as unknown as MixedSetterType

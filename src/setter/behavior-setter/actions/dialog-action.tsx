@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { SettingTarget } from '@alilc/lowcode-types';
+import { IPublicModelSettingTarget } from '@alilc/lowcode-types';
 import { Select, Box } from '@alifd/next';
 import { BehaviorActionProps, BehaviorAction } from '../types';
 
@@ -8,7 +8,7 @@ interface DialogActionValue {
   id?: string;
 }
 
-const getDialogList = (field: SettingTarget) => {
+const getDialogList = (field: IPublicModelSettingTarget) => {
   const node = (field as any).getNode();
   const nodeDocument = node.document || node.page;
   let nodeList = nodeDocument?.modalNodesManager?.getModalNodes?.();

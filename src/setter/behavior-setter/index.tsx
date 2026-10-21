@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { useState, ErrorInfo, useMemo } from 'react';
 import { Radio, Select, Box } from '@alifd/next';
-import { SettingTarget, CustomView } from '@alilc/lowcode-types';
+import type { DataSourceItem } from '@alifd/next/types/select';
+import type { RadioValue } from '@alifd/next/types/radio';
+import { IPublicModelSettingTarget, IPublicTypeCustomView } from '@alilc/lowcode-types';
 
 import './index.scss';
 import { BehaviorAction } from './types';
@@ -11,9 +13,9 @@ import { messageBehaviorAction } from './actions/message-action';
 import { tooltipBehaviorAction } from './actions/tooltip-action';
 
 interface BehaviorSetterProps {
-  field?: SettingTarget;
+  field?: IPublicModelSettingTarget;
   // 兼容 vision engine
-  prop?: SettingTarget;
+  prop?: IPublicModelSettingTarget;
   onChange: Function;
   actions: string[];
   type?: 'dialog' | 'link' | undefined;
@@ -32,7 +34,7 @@ const defaultActionMap = {
   tooltip: tooltipBehaviorAction,
   message: messageBehaviorAction,
 };
-const BehaviorSetter: CustomView = ({
+const BehaviorSetter: IPublicTypeCustomView = ({
   value: behaviors = {},
   onChange,
   field: propsField,
@@ -89,7 +91,9 @@ const BehaviorSetter: CustomView = ({
               value: action,
             }))}
             value={currentEvent}
-            onChange={(eventName) => setCurrentEvent(eventName)}
+            onChange={(eventName: DataSourceItem | DataSourceItem[]) =>
+              setCurrentEvent(String(eventName))
+            }
           />
         </Box>
       </Box>
@@ -105,7 +109,9 @@ const BehaviorSetter: CustomView = ({
             }))}
             value={currentBehaviorType}
             shape="button"
-            onChange={(behaviorType: string) => updateCurrentEventBehavior(behaviorType, undefined)}
+            onChange={(behaviorType: RadioValue) =>
+              updateCurrentEventBehavior(String(behaviorType), undefined)
+            }
           />
         </Box>
       </Box>
@@ -114,7 +120,7 @@ const BehaviorSetter: CustomView = ({
           field,
           value: currentBehavior[currentBehaviorType],
           onChange: (behaviorValue: Record<string, any>) => {
-            field.parent.setPropValue(currentEvent, behaviorOption.toActionValue(behaviorValue, extendedOptions[currentBehaviorType]));
+            field?.parent?.setPropValue(currentEvent, behaviorOption.toActionValue(behaviorValue, extendedOptions[currentBehaviorType]));
             updateCurrentEventBehavior(currentBehaviorType, behaviorValue);
           },
           options: currentBehaviorType === 'link' ? {
@@ -132,11 +138,14 @@ export default BehaviorSetter;
 
 
 // eslint-disable-next-line @iceworks/best-practices/recommend-functional-component
-class ErrorBoundary extends React.Component {
+class ErrorBoundary extends React.Component<
+  { children?: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
   // 更新 state 使下一次渲染能够显示降级后的 UI
-  static getDerivedStateFromError = (error: any) => ({ hasError: true, error });
+  static getDerivedStateFromError = (error: Error) => ({ hasError: true, error });
 
-  state = { hasError: false, error: undefined as Error };
+  state: { hasError: boolean; error?: Error } = { hasError: false, error: undefined };
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // 你同样可以将错误日志上报给服务器
     console.error(error, errorInfo);
@@ -145,7 +154,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       // 你可以自定义降级后的 UI 并渲染
-      return <div>渲染异常: {this.state.error?.message || this.state.error || ''}</div>;
+      return <div>渲染异常: {this.state.error?.message || ''}</div>;
     }
 
     return this.props.children;

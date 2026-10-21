@@ -58,7 +58,7 @@ interface ArraySetterProps {
   multiValue?: boolean;
   hideDescription?: boolean;
   onChange?: Function;
-  extraProps: {renderFooter?: (options: ArraySetterProps & {onAdd: (val?: {}) => any}) => any}
+  extraProps?: {renderFooter?: (options: ArraySetterProps & {onAdd: (val?: {}) => any}) => any}
 }
 
 export class ListSetter extends Component<ArraySetterProps, ArraySetterState> {
@@ -262,6 +262,10 @@ export default class ArraySetter extends Component<{
   multiValue?: boolean;
 }> {
   static contextType = PopupContext;
+
+  // React 的 Component 基类把 context 声明为 unknown，用 static contextType 后
+  // 需要按 @types/react 文档再声明一次，才能拿到具体的 ContextType。
+  declare context: React.ContextType<typeof PopupContext>;
 
   private pipe: any;
 

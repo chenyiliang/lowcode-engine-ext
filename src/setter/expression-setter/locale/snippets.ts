@@ -68,11 +68,13 @@ export default [
     detail: 'ReactDom对象',
   },
   {
-    label: 'ReactDOM.findDOMNode',
+    // React 19 已移除 `ReactDOM.findDOMNode`（原片段为 `ReactDOM.findDOMNode(this.refs.xxxx)`），
+    // 取真实 DOM 节点的唯一方式是 ref，因此把片段换成 ref 用法。
+    label: 'ref.current',
     kind: 'Function',
-    insertText: 'ReactDOM.findDOMNode(${1:this.refs.xxxx})',
+    insertText: '${1:this.someRef}.current',
     insertTextRules: 'InsertAsSnippet',
-    detail: 'ReactDom查找真实dom node',
+    detail: '通过 ref 获取真实 dom node（React 19 已移除 findDOMNode）',
   },
   {
     label: 'Dialog.alert',
